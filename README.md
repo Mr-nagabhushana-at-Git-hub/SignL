@@ -8,12 +8,17 @@ A comprehensive real-time AI system that combines **Sign Language Recognition** 
 
 ## 🚀 Features
 
-- **Real-Time Sign Language Recognition**: Transformer-based model for recognizing sign language gestures
+- **Real-Time Sign Language Recognition**: Gesture-based classifier using MediaPipe hand tracking
+  - 25+ recognizable signs (ASL alphabet + common words)
+  - Real-time translation to text and audio
+  - Test video upload and processing
 - **Face Recognition**: Identify people from pre-loaded face datasets organized by person folders
 - **MediaPipe Integration**: Real-time pose, hand, and face landmark detection with smoothing filters
+- **Advanced Emotion Detection**: Geometric emotion analysis with valence-arousal mapping
+- **Gender Detection**: Real-time gender recognition
 - **GPU Acceleration**: CUDA support for RTX 4060 and other NVIDIA GPUs
 - **WebSocket Streaming**: Real-time video processing with web interface
-- **REST API**: Complete API for managing faces and signs
+- **REST API**: Complete API for managing faces, signs, and emotions
 - **Performance Monitoring**: FPS tracking and processing time metrics
 
 ## 📁 Project Structure
@@ -209,6 +214,16 @@ Once started, open your browser and navigate to:
 - `GET /signs` - Sign classifier information  
 - `POST /signs/reset` - Reset current sign sequence
 - `POST /signs/confidence/{threshold}` - Set confidence threshold
+
+### Video Testing
+- `POST /video/upload` - Upload test video
+- `POST /video/process/{filename}` - Process uploaded video
+- `GET /video/list` - List uploaded videos
+- `DELETE /video/{filename}` - Delete test video
+
+### Emotion Detection
+- `GET /emotion/status` - Get emotion detection status
+- `POST /emotion/tune` - Fine-tune emotion parameters
 
 ## 🎯 Usage
 

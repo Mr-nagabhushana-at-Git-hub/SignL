@@ -7,6 +7,7 @@ import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi import UploadFile, File
 import logging
 import cv2
 import numpy as np
@@ -20,6 +21,7 @@ from signl.models.pytorch_face_recognizer import PyTorchFaceRecognizer
 from signl.models.sign_classifier import SignClassifier
 from signl.models.gesture_sign_classifier import GestureSignClassifier
 from signl.models.gender_processor import GenderProcessor
+from signl.utils.video_processor import VideoProcessor
 from signl.config import MODELS_DIR, SIGN_LANGUAGE_MODEL, FRONTEND_DIR
 from signl.api.websocket_handler import WebSocketManager, websocket_endpoint
 
@@ -40,6 +42,11 @@ class AppState:
         self.last_faces_ts: float = 0.0
         # Feature toggles
         self.gender_enabled: bool = True
+        
+        # Initialize video processor for test videos
+        from pathlib import Path
+        temp_video_dir = Path(__file__).resolve().parent.parent / "data" / "temp_videos"
+        self.video_processor = VideoProcessor(temp_video_dir)
         
         # Initialize Enhanced MediaPipe with stable settings
         logger.info("🎯 Initializing MediaPipe...")
@@ -798,3 +805,136 @@ async def set_confidence_threshold(threshold: float):
         set_count += 1
     
     return {"status": "success", "message": f"Confidence threshold set to {threshold} for {set_count} classifier(s)"}
+
+@app.post("/video/upload")
+async def upload_test_video(file: UploadFile = File(...)):
+    """
+    Upload a test video for sign language recognition testing
+    """
+    try:
+        # Validate file type
+        if not file.content_type or not file.content_type.startswith('video/'):
+            return {
+                "status": "error",
+                "message": f"Invalid file type: {file.content_type}. Please upload a video file."
+            }
+        
+        # Read file data
+        video_data = await file.read()
+        
+        # Save video
+        video_path = app.state.app_state.video_processor.save_uploaded_video(
+            video_data, 
+            file.filename or 'test_video.mp4'
+        )
+        
+        return {
+            "status": "success",
+            "message": f"Video uploaded successfully: {file.filename}",
+            "filename": file.filename,
+            "size_bytes": len(video_data),
+            "video_path": str(video_path)
+        }
+        
+    except Exception as e:
+        logger.error(f"Video upload error: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.post("/video/process/{filename}")
+async def process_test_video(filename: str):
+    """
+    Process uploaded test video and return sign language predictions
+    """
+    try:
+        video_path = app.state.app_state.video_processor.temp_dir / filename
+        
+        if not video_path.exists():
+            return {
+                "status": "error",
+                "message": f"Video not found: {filename}"
+            }
+        
+        # Use gesture classifier for processing
+        classifier = app.state.app_state.gesture_classifier
+        if not classifier:
+            # Fallback to transformer classifier
+            classifier = app.state.app_state.sign_classifier
+        
+        if not classifier:
+            return {
+                "status": "error",
+                "message": "No sign language classifier available"
+            }
+        
+        # Process video
+        result = await app.state.app_state.video_processor.process_video(
+            video_path,
+            app.state.app_state.mp_processor,
+            classifier
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Video processing error: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.get("/video/list")
+async def list_test_videos():
+    """List all uploaded test videos"""
+    try:
+        temp_dir = app.state.app_state.video_processor.temp_dir
+        videos = []
+        
+        if temp_dir.exists():
+            for video_file in temp_dir.glob('*'):
+                if video_file.is_file():
+                    videos.append({
+                        "filename": video_file.name,
+                        "size_bytes": video_file.stat().st_size,
+                        "modified": video_file.stat().st_mtime
+                    })
+        
+        return {
+            "status": "success",
+            "videos": videos,
+            "count": len(videos)
+        }
+        
+    except Exception as e:
+        logger.error(f"Video list error: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.delete("/video/{filename}")
+async def delete_test_video(filename: str):
+    """Delete a test video"""
+    try:
+        video_path = app.state.app_state.video_processor.temp_dir / filename
+        
+        if video_path.exists():
+            video_path.unlink()
+            return {
+                "status": "success",
+                "message": f"Video deleted: {filename}"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"Video not found: {filename}"
+            }
+            
+    except Exception as e:
+        logger.error(f"Video deletion error: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }

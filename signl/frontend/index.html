@@ -605,11 +605,87 @@
 
         testVideoInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
-            if (file) {
-                alert(`Test video upload feature coming soon!\nSelected: ${file.name}`);
-                // TODO: Implement video upload and processing
+            if (!file) return;
+            
+            try {
+                status.textContent = `⏳ Uploading video: ${file.name}...`;
+                status.className = 'connected';
+                
+                // Upload video
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const uploadResponse = await fetch('/video/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const uploadResult = await uploadResponse.json();
+                
+                if (uploadResult.status === 'success') {
+                    status.textContent = `✅ Video uploaded! Processing...`;
+                    
+                    // Process video
+                    const processResponse = await fetch(`/video/process/${uploadResult.filename}`, {
+                        method: 'POST'
+                    });
+                    
+                    const processResult = await processResponse.json();
+                    
+                    if (processResult.status === 'success') {
+                        displayVideoResults(processResult);
+                        status.textContent = `✅ Video processed successfully!`;
+                    } else {
+                        alert(`Processing failed: ${processResult.message}`);
+                        status.textContent = `❌ Processing failed`;
+                    }
+                } else {
+                    alert(`Upload failed: ${uploadResult.message}`);
+                    status.textContent = `❌ Upload failed`;
+                }
+                
+            } catch (error) {
+                console.error('Video upload/process error:', error);
+                alert(`Error: ${error.message}`);
+                status.textContent = `❌ Error: ${error.message}`;
+                status.className = 'error';
             }
+            
+            // Reset input
+            e.target.value = '';
         });
+
+        // Display video processing results
+        function displayVideoResults(result) {
+            const summary = result.summary || {};
+            const videoInfo = result.video_info || {};
+            
+            let html = `
+                <div style="background: rgba(0,255,0,0.1); padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                    <h3 style="margin: 0 0 10px 0;">📹 Test Video Results</h3>
+                    <p><strong>Duration:</strong> ${videoInfo.duration?.toFixed(1)}s</p>
+                    <p><strong>Frames Processed:</strong> ${videoInfo.processed_frames} / ${videoInfo.total_frames}</p>
+                    <p><strong>Predictions:</strong> ${summary.total_predictions}</p>
+                    <p><strong>Unique Signs:</strong> ${summary.unique_signs}</p>
+                </div>
+            `;
+            
+            if (summary.signs_detected) {
+                html += '<h4>Detected Signs:</h4>';
+                for (const [sign, data] of Object.entries(summary.signs_detected)) {
+                    html += `
+                        <div class="translation-item">
+                            <div class="translation-text">🤟 ${sign}</div>
+                            <div class="translation-confidence">
+                                Count: ${data.count} | Avg Confidence: ${(data.avg_confidence * 100).toFixed(0)}%
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+            
+            translationDisplay.innerHTML = html;
+        }
 
         // Translation display function
         function addTranslation(signText, confidence) {
