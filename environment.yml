@@ -1,0 +1,36 @@
+# environment.yml
+# Version 5: Definitive and Corrected Dependencies
+
+name: project-synapse
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.11,<3.12
+  - cudatoolkit>=11.8
+  - pytorch
+  - torchvision
+  - torchaudio
+  - opencv
+  - numpy
+  - pandas
+  - scikit-learn
+  - transformers
+  - tokenizers
+  - accelerate
+  - librosa
+  - fastapi
+  - uvicorn
+  - matplotlib
+  - seaborn
+  - jupyterlab
+  - pip
+  - pip:
+    - mediapipe
+    - coqui-tts
+    - gfpgan
+    - soundfile
+    - python-multipart
+    - aiofiles
+    - websockets>=12.0

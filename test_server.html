@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Server Test</title>
+</head>
+<body>
+    <h1>Testing MajorSignL Server</h1>
+    <div id="status">Connecting...</div>
+    <video id="video" width="640" height="480" autoplay></video>
+    <canvas id="canvas" width="640" height="480" style="display:none;"></canvas>
+    <img id="output" width="640" height="480" style="border: 2px solid red;">
+    
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const output = document.getElementById('output');
+        const status = document.getElementById('status');
+        
+        let ws;
+        
+        async function init() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                status.textContent = "Camera OK - Connecting to WebSocket...";
+                
+                ws = new WebSocket('ws://localhost:8000/ws');
+                
+                ws.onopen = () => {
+                    status.textContent = "WebSocket Connected! Streaming...";
+                    sendFrames();
+                };
+                
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    output.src = "data:image/jpeg;base64," + data.image;
+                    status.textContent = `Frame received! Faces: ${data.faces?.length || 0}`;
+                };
+                
+                ws.onerror = (error) => {
+                    status.textContent = "WebSocket Error: " + error;
+                };
+                
+                ws.onclose = () => {
+                    status.textContent = "WebSocket Closed";
+                };
+                
+            } catch (err) {
+                status.textContent = "Camera Error: " + err.message;
+            }
+        }
+        
+        function sendFrames() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ctx.drawImage(video, 0, 0, 640, 480);
+                canvas.toBlob((blob) => {
+                    if (blob) ws.send(blob);
+                    setTimeout(sendFrames, 33); // ~30 FPS
+                }, 'image/jpeg', 0.8);
+            } else {
+                setTimeout(sendFrames, 100);
+            }
+        }
+        
+        init();
+    </script>
+</body>
+</html>

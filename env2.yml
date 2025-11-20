@@ -1,0 +1,38 @@
+# environment.yml
+# GPU-enabled for PyTorch (SignL) under WSL2
+# RTX 4060 + CUDA 13 driver → PyTorch CUDA 12.1 build
+
+name: SignL
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python>=3.11,<3.12
+  - pytorch
+  - torchvision
+  - torchaudio
+  - pytorch-cuda=12.1
+  - opencv
+  - numpy
+  - pandas
+  - scikit-learn
+  - transformers
+  - tokenizers
+  - accelerate
+  - librosa
+  - fastapi
+  - uvicorn
+  - matplotlib
+  - seaborn
+  - jupyterlab
+  - pip
+  - pip:
+      - mediapipe
+      - coqui-tts
+      - gfpgan
+      - soundfile
+      - python-multipart
+      - aiofiles
+      - websockets>=12.0

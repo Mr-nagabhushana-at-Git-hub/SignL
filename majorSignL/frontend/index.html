@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project Synapse - Real-Time AI</title>
+    <style>
+        :root {
+            --panel-max-w: 640px;
+            --panel-aspect: 4 / 3;
+            --box-pad: 15px;
+            --gap: 20px;
+        }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            background: linear-gradient(135deg, #1a1a1a, #2d2d2d);
+            color: #e0e0e0; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            margin: 0; 
+            padding: 20px; 
+        }
+        .container { 
+            display: grid; 
+            grid-template-columns: repeat(2, minmax(320px, 1fr)); 
+            gap: var(--gap); 
+            width: 100%;
+            max-width: 1400px;
+            align-items: start;
+        }
+        @media (max-width: 1100px) { 
+            .container { grid-template-columns: 1fr; }
+        }
+        .video-box { 
+            border: 3px solid #555; 
+            border-radius: 12px; 
+            padding: var(--box-pad); 
+            background: linear-gradient(145deg, #2a2a2a, #3a3a3a);
+            position: relative; 
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: var(--panel-max-w);
+        }
+    .video-box h2 { margin: 0 0 8px 0; font-weight: 600; }
+    .media-stack { position: relative; width: 100%; }
+    .media-stack img, .media-stack canvas { width: 100%; height: auto; aspect-ratio: var(--panel-aspect); display: block; }
+        video, img, canvas { display: block; border-radius: 8px; }
+        /* Make media fluid while preserving intrinsic draw resolution (640x480) */
+        video, img { width: 100%; height: auto; aspect-ratio: var(--panel-aspect); }
+        /* Overlay canvas fills the media area, pointer-events off for clicks below */
+        #overlay-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+        #status { 
+            margin-top: 20px; 
+            font-weight: bold; 
+            padding: 10px 20px;
+            border-radius: 20px;
+            background-color: #2a2a2a;
+        }
+        .controls { 
+            display: flex; 
+            align-items: center; 
+            gap: 15px; 
+            margin-bottom: 20px; 
+            padding: 15px; 
+            background: linear-gradient(145deg, #2a2a2a, #3a3a3a);
+            border-radius: 12px; 
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 1400px;
+        }
+        .controls select, .controls button { 
+            font-size: 14px; 
+            padding: 8px 12px; 
+            border-radius: 6px; 
+            border: 2px solid #555; 
+            background-color: #333; 
+            color: #e0e0e0; 
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .controls button:hover { background-color: #444; border-color: #777; }
+        .stats { 
+            position: absolute; 
+            top: 5px; 
+            right: 5px; 
+            background: rgba(0,0,0,0.7); 
+            color: #00ff00; 
+            padding: 5px 8px; 
+            border-radius: 4px; 
+            font-size: 11px; 
+            font-family: monospace; 
+        }
+        .connected { color: #00ff00; }
+        .disconnected { color: #ff4444; }
+        .error { color: #ff8888; }
+    </style>
+</head>
+<body>
+    <h1>🎯 Project Synapse - Real-Time AI Processing</h1>
+    
+    <div class="controls">
+        <label for="camera-select">📹 Camera:</label>
+        <select id="camera-select"></select>
+        <button id="switch-camera-btn">Switch Camera</button>
+        <button id="test-connection-btn">Test Connection</button>
+        <button id="toggle-gender-btn" title="Toggle Gender" aria-pressed="true">⚥ Gender: ON</button>
+    </div>
+
+    <div class="container">
+        <div class="video-box">
+            <h2>📷 Your Webcam</h2>
+            <video id="webcam" width="640" height="480" autoplay muted></video>
+            <div class="stats" id="input-stats">Waiting...</div>
+        </div>
+        
+        <div class="video-box">
+            <h2>🤖 AI Processed Feed</h2>
+            <div class="media-stack">
+                <img id="processed-stream" width="640" height="480" style="background: #1a1a1a;">
+                <canvas id="overlay-canvas" width="640" height="480"></canvas>
+            </div>
+            <div class="stats" id="output-stats">No data</div>
+        </div>
+    </div>
+    
+    <!-- Emotion Display Panel -->
+    <div class="video-box" style="margin-top: 20px; text-align: center; max-width: 600px;">
+        <h3>🎭 Advanced Emotion Detection</h3>
+        <div style="display: flex; gap: 20px; justify-content: center; margin: 10px;">
+            <div>
+                <div id="emotion-display" style="font-size: 2em;">😐 neutral</div>
+                <div id="emotion-confidence" style="color: #888; font-size: 0.9em;">Confidence: 0%</div>
+            </div>
+            <div style="text-align: left; font-size: 0.8em;">
+                <div><strong>Valence:</strong> <span id="valence-value">0.0</span> (😢 ← → 😊)</div>
+                <div><strong>Arousal:</strong> <span id="arousal-value">0.0</span> (😴 ← → 🤯)</div>
+                <div style="margin-top: 10px;">
+                    <button id="tune-emotions-btn" style="padding: 5px 10px;">🎛️ Fine-tune</button>
+                </div>
+            </div>
+        </div>
+        <div id="emotion-probabilities" style="font-size: 0.7em; color: #666; margin-top: 5px;"></div>
+    </div>
+    
+    <!-- Fine-tuning Modal (hidden by default) -->
+    <div id="tune-modal" style="display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                                background: #2a2a2a; padding: 20px; border-radius: 10px; border: 2px solid #555; z-index: 1000;">
+        <h3>🎛️ Fine-tune Emotion Detection</h3>
+        <div style="margin: 10px 0;">
+            <label>Happy Threshold: <input type="range" id="happy-threshold" min="0.1" max="1.0" step="0.05" value="0.5"> <span id="happy-val">0.5</span></label>
+        </div>
+        <div style="margin: 10px 0;">
+            <label>Sad Threshold: <input type="range" id="sad-threshold" min="0.1" max="1.0" step="0.05" value="0.4"> <span id="sad-val">0.4</span></label>
+        </div>
+        <div style="margin: 10px 0;">
+            <label>Neutral Threshold: <input type="range" id="neutral-threshold" min="0.1" max="1.0" step="0.05" value="0.3"> <span id="neutral-val">0.3</span></label>
+        </div>
+        <div style="margin: 15px 0;">
+            <button id="apply-tune-btn">✅ Apply</button>
+            <button id="close-tune-btn">❌ Close</button>
+        </div>
+    </div>
+    
+    <p id="status" class="disconnected">Status: Initializing...</p>
+    <canvas id="capture-canvas" width="640" height="480" style="display: none;"></canvas>
+
+    <script>
+        // DOM Elements
+        const video = document.getElementById('webcam');
+        const captureCanvas = document.getElementById('capture-canvas');
+        const captureContext = captureCanvas.getContext('2d');
+        const processedStream = document.getElementById('processed-stream');
+        const status = document.getElementById('status');
+        const cameraSelect = document.getElementById('camera-select');
+        const switchBtn = document.getElementById('switch-camera-btn');
+        const testBtn = document.getElementById('test-connection-btn');
+        const overlayCanvas = document.getElementById('overlay-canvas');
+        const overlayContext = overlayCanvas.getContext('2d');
+        const inputStats = document.getElementById('input-stats');
+        const outputStats = document.getElementById('output-stats');
+        const emotionDisplay = document.getElementById('emotion-display');
+        const emotionConfidence = document.getElementById('emotion-confidence');
+        const valenceValue = document.getElementById('valence-value');
+        const arousalValue = document.getElementById('arousal-value');
+        const emotionProbabilities = document.getElementById('emotion-probabilities');
+        const tuneEmotionsBtn = document.getElementById('tune-emotions-btn');
+        const tuneModal = document.getElementById('tune-modal');
+    const toggleGenderBtn = document.getElementById('toggle-gender-btn');
+
+        // Constants - removed unused GENDER_COLORS
+
+        // Emotion helper function
+        function getEmotionEmoji(emotion) {
+            const emojis = {
+                'happy': '😊',
+                'sad': '😢', 
+                'angry': '😠',
+                'surprised': '😮',
+                'disgusted': '🤢',
+                'fearful': '😨',
+                'neutral': '😐'
+            };
+            return emojis[emotion] || '😐';
+        }
+        
+        function getEmotionColor(emotion) {
+            const colors = {
+                'happy': '#00ff00',
+                'sad': '#4d79ff',
+                'angry': '#ff4444',
+                'surprised': '#ffff00',
+                'disgusted': '#9933cc',
+                'fearful': '#ff8800',
+                'neutral': '#cccccc'
+            };
+            return colors[emotion] || '#cccccc';
+        }
+        
+        let currentStream;
+        let ws;
+        let frameCount = 0;
+        let lastFrameTime = Date.now();
+
+        function connectWebSocket() {
+            console.log('🔄 Attempting WebSocket connection...');
+            status.textContent = "🔄 Connecting to server...";
+            
+            ws = new WebSocket("ws://localhost:8000/ws");
+            
+            ws.onopen = () => {
+                console.log('✅ WebSocket connected');
+                status.textContent = "Status: 🟢 Connected - Streaming Active";
+                status.className = "connected";
+                setInterval(sendFrame, 33); // ~30 FPS
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    // Update processed image
+                    processedStream.src = "data:image/jpeg;base64," + data.image;
+                    
+                    // Client-side overlay not needed; server draws overlays into image now
+                    overlayContext.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                    
+                    // Update stats with emotion information
+                    const processingTime = data.debug || {};
+                    const emotion = data.emotion || {};
+                    const emotionText = emotion.emotion ? `${getEmotionEmoji(emotion.emotion)} ${emotion.emotion} (${(emotion.confidence * 100).toFixed(0)}%)` : 'No emotion';
+
+                    // Count recognized faces (not unknown and reasonable box size)
+                    const validFaces = data.faces ? data.faces.filter(face => {
+                        const [startX, startY, endX, endY] = face.box;
+                        const boxArea = (endX - startX) * (endY - startY);
+                        const imageArea = 640 * 480;
+                        return face.name !== 'Unknown' && boxArea < imageArea * 0.95 && boxArea > 1000;
+                    }).length : 0;
+
+                    outputStats.textContent = `Faces: ${data.faces?.length || 0} | Recognized: ${validFaces} | ` +
+                        `MP: ${processingTime.mediapipe_ms || 0}ms | ` +
+                        `Face: ${processingTime.face_recognition_ms || 0}ms | ` +
+                        `Emotion: ${emotionText}`;
+
+                    // Reflect gender toggle state in the button
+                    if (data.toggles && typeof data.toggles.gender_enabled === 'boolean') {
+                        const enabled = data.toggles.gender_enabled;
+                        toggleGenderBtn.textContent = enabled ? '⚥ Gender: ON' : '⚥ Gender: OFF';
+                        toggleGenderBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+                    }
+                    
+                    // Update emotion display panel
+                    if (emotion.emotion && emotion.confidence > 0.2) {
+                        emotionDisplay.textContent = `${getEmotionEmoji(emotion.emotion)} ${emotion.emotion}`;
+                        emotionConfidence.textContent = `Confidence: ${(emotion.confidence * 100).toFixed(1)}%`;
+                        emotionDisplay.style.color = getEmotionColor(emotion.emotion);
+                        
+                        // Update valence-arousal values
+                        if (emotion.valence !== null) {
+                            valenceValue.textContent = emotion.valence.toFixed(2);
+                            arousalValue.textContent = emotion.arousal.toFixed(2);
+                        }
+                        
+                        // Show smoothed probabilities
+                        if (emotion.smoothed_probabilities) {
+                            const probsText = Object.entries(emotion.smoothed_probabilities)
+                                .filter(([_, prob]) => prob > 0.1)
+                                .map(([emotion, prob]) => `${emotion}: ${(prob * 100).toFixed(0)}%`)
+                                .join(' | ');
+                            emotionProbabilities.textContent = probsText;
+                        }
+                        
+                    } else {
+                        emotionDisplay.textContent = '😐 neutral';
+                        emotionConfidence.textContent = 'Confidence: 0%';
+                        emotionDisplay.style.color = '#ccc';
+                        valenceValue.textContent = '0.0';
+                        arousalValue.textContent = '0.0';
+                    }
+                    
+                } catch (e) {
+                    console.error("Error processing message:", e);
+                }
+            };
+
+            ws.onclose = (event) => {
+                console.log('❌ WebSocket closed:', event.code, event.reason);
+                status.textContent = "Status: 🔴 Disconnected - Reconnecting...";
+                status.className = "disconnected";
+                setTimeout(connectWebSocket, 3000); // Auto-reconnect
+            };
+
+            ws.onerror = (error) => {
+                console.error('❌ WebSocket error:', error);
+                status.textContent = "Status: ⚠️ Connection Error";
+                status.className = "error";
+            };
+        }
+
+        function sendFrame() {
+            if (ws && ws.readyState === WebSocket.OPEN && video.videoWidth > 0) {
+                captureContext.drawImage(video, 0, 0, 640, 480);
+                captureCanvas.toBlob((blob) => {
+                    if (blob) {
+                        ws.send(blob);
+                        
+                        // Update input stats
+                        frameCount++;
+                        const now = Date.now();
+                        if (now - lastFrameTime > 1000) {
+                            const fps = Math.round(frameCount * 1000 / (now - lastFrameTime));
+                            inputStats.textContent = `${fps} FPS | ${Math.round(blob.size/1024)}KB`;
+                            frameCount = 0;
+                            lastFrameTime = now;
+                        }
+                    }
+                }, 'image/jpeg', 0.8);
+            }
+        }
+
+        async function getCameras() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                
+                cameraSelect.innerHTML = '';
+                videoDevices.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.text = device.label || `Camera ${index + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+                
+                console.log(`Found ${videoDevices.length} cameras`);
+            } catch (err) {
+                console.error("Error enumerating devices:", err);
+            }
+        }
+
+        async function setupWebcam(deviceId) {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+            
+            const constraints = {
+                video: {
+                    deviceId: deviceId ? { exact: deviceId } : undefined,
+                    width: { ideal: 640 },
+                    height: { ideal: 480 },
+                    frameRate: { ideal: 30 }
+                }
+            };
+            
+            try {
+                console.log('🔄 Requesting camera access...');
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                console.log('✅ Camera access granted');
+                
+                video.srcObject = stream;
+                currentStream = stream;
+                
+                video.onloadedmetadata = () => {
+                    console.log(`✅ Video loaded: ${video.videoWidth}x${video.videoHeight}`);
+                };
+                
+            } catch (err) {
+                console.error('❌ Camera error:', err);
+                status.textContent = `❌ Camera Error: ${err.message}`;
+                status.className = "error";
+                
+                // Show more specific error messages
+                if (err.name === 'NotAllowedError') {
+                    status.textContent = "❌ Camera permission denied. Please allow camera access.";
+                } else if (err.name === 'NotFoundError') {
+                    status.textContent = "❌ No camera found. Please connect a camera.";
+                } else if (err.name === 'NotReadableError') {
+                    status.textContent = "❌ Camera is already in use by another application.";
+                }
+            }
+        }
+
+        // Event Listeners
+        switchBtn.addEventListener('click', () => {
+            setupWebcam(cameraSelect.value);
+        });
+
+        testBtn.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/health');
+                const data = await response.json();
+                alert(`Server Health: ${JSON.stringify(data, null, 2)}`);
+            } catch (e) {
+                alert('Server connection failed!');
+            }
+        });
+
+        // Gender toggle
+        toggleGenderBtn.addEventListener('click', async () => {
+            try {
+                const res = await fetch('/gender/toggle', { method: 'POST' });
+                const data = await res.json();
+                const enabled = !!data.enabled;
+                toggleGenderBtn.textContent = enabled ? '⚥ Gender: ON' : '⚥ Gender: OFF';
+                toggleGenderBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+            } catch (e) {
+                console.error('Failed to toggle gender:', e);
+            }
+        });
+
+        // Fine-tuning functionality
+        tuneEmotionsBtn.addEventListener('click', () => {
+            tuneModal.style.display = 'block';
+        });
+
+        document.getElementById('close-tune-btn').addEventListener('click', () => {
+            tuneModal.style.display = 'none';
+        });
+
+        // Update threshold displays
+        document.getElementById('happy-threshold').addEventListener('input', (e) => {
+            document.getElementById('happy-val').textContent = e.target.value;
+        });
+        
+        document.getElementById('sad-threshold').addEventListener('input', (e) => {
+            document.getElementById('sad-val').textContent = e.target.value;
+        });
+        
+        document.getElementById('neutral-threshold').addEventListener('input', (e) => {
+            document.getElementById('neutral-val').textContent = e.target.value;
+        });
+
+        // Apply fine-tuning
+        document.getElementById('apply-tune-btn').addEventListener('click', async () => {
+            const tuneParams = {
+                emotion_thresholds: {
+                    happy: parseFloat(document.getElementById('happy-threshold').value),
+                    sad: parseFloat(document.getElementById('sad-threshold').value),
+                    neutral: parseFloat(document.getElementById('neutral-threshold').value)
+                }
+            };
+
+            try {
+                const response = await fetch('/emotion/tune', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(tuneParams)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('✅ Emotion thresholds updated successfully!');
+                } else {
+                    alert('❌ Failed to update thresholds: ' + result.error);
+                }
+                
+            } catch (error) {
+                alert('❌ Network error: ' + error.message);
+            }
+            
+            tuneModal.style.display = 'none';
+        });
+
+        // Initialize
+        async function init() {
+            try {
+                console.log('🔄 Starting initialization...');
+                status.textContent = "🔄 Getting cameras...";
+                
+                await getCameras();
+                console.log('✅ Cameras enumerated');
+                
+                status.textContent = "🔄 Setting up webcam...";
+                await setupWebcam();
+                console.log('✅ Webcam setup complete');
+                
+                status.textContent = "🔄 Connecting WebSocket...";
+                connectWebSocket();
+                console.log('✅ WebSocket connection initiated');
+                
+            } catch (error) {
+                console.error('❌ Initialization error:', error);
+                status.textContent = `❌ Error: ${error.message}`;
+                status.className = "error";
+            }
+        }
+
+        // Add global error handler
+        window.addEventListener('error', function(e) {
+            console.error('❌ Global error:', e.error);
+            status.textContent = `❌ JavaScript Error: ${e.error.message}`;
+            status.className = "error";
+        });
+
+        window.addEventListener('unhandledrejection', function(e) {
+            console.error('❌ Unhandled promise rejection:', e.reason);
+            status.textContent = `❌ Promise Error: ${e.reason}`;
+            status.className = "error";
+        });
+
+        console.log('🚀 Starting MajorSignL frontend...');
+        init();
+    </script>
+</body>
+</html>
