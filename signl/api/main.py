@@ -18,6 +18,7 @@ from signl.utils.mediapipe_processor import MediaPipeProcessor
 from signl.models.face_processor import FaceProcessor
 from signl.models.pytorch_face_recognizer import PyTorchFaceRecognizer
 from signl.models.sign_classifier import SignClassifier
+from signl.models.gesture_sign_classifier import GestureSignClassifier
 from signl.models.gender_processor import GenderProcessor
 from signl.config import MODELS_DIR, SIGN_LANGUAGE_MODEL, FRONTEND_DIR
 from signl.api.websocket_handler import WebSocketManager, websocket_endpoint
@@ -82,6 +83,7 @@ class AppState:
         # Initialize Sign Language Classifier with GPU acceleration
         logger.info("🤟 Initializing Sign Language Classifier...")
         try:
+            # Try PyTorch transformer model first
             self.sign_classifier = SignClassifier(SIGN_LANGUAGE_MODEL if SIGN_LANGUAGE_MODEL.exists() else None)
             
             # GPU warm-up for faster inference
@@ -91,9 +93,25 @@ class AppState:
             logger.info(f"✅ Sign Classifier ready! Model loaded: {sign_info['model_loaded']}")
             logger.info(f"🔥 GPU Device: {sign_info['device']}")
             logger.info(f"🤟 Available signs: {sign_info['actions']}")
+            
+            # Initialize gesture-based classifier as backup/alternative
+            logger.info("🤲 Initializing Gesture-based Sign Classifier...")
+            self.gesture_classifier = GestureSignClassifier(confidence_threshold=0.6)
+            gesture_info = self.gesture_classifier.get_model_info()
+            logger.info(f"✅ Gesture Classifier ready! Available signs: {len(gesture_info['actions'])}")
+            
         except Exception as e:
             logger.error(f"❌ Sign Classifier failed: {e}")
             self.sign_classifier = None
+            # Fallback to gesture classifier only
+            try:
+                logger.info("🔄 Falling back to gesture-based classifier only...")
+                self.gesture_classifier = GestureSignClassifier(confidence_threshold=0.6)
+                gesture_info = self.gesture_classifier.get_model_info()
+                logger.info(f"✅ Gesture Classifier ready! Available signs: {len(gesture_info['actions'])}")
+            except Exception as gesture_e:
+                logger.error(f"❌ Gesture Classifier also failed: {gesture_e}")
+                self.gesture_classifier = None
 
 app.state.app_state = AppState()
 
@@ -158,19 +176,36 @@ async def ai_processing_task(app_state: AppState):
                 # Sign language classification
                 sign_data = {"predicted_sign": "No Model", "confidence": 0.0}
                 sign_time = 0
-                if app_state.sign_classifier and frame_count % 3 == 0:
+                
+                # Try gesture-based classifier first (faster and doesn't need trained model)
+                if app_state.gesture_classifier and frame_count % 2 == 0:
                     mp_results = app_state.mp_processor.get_landmarks_for_classification()
                     if mp_results:
                         sign_start = time.time()
                         try:
-                            sign_data = await asyncio.to_thread(app_state.sign_classifier.update_sequence, mp_results)
-                            if not sign_data:
-                                sign_data = {"predicted_sign": "No Results", "confidence": 0.0}
-                        except Exception as sign_e:
-                            logger.error(f"Sign classification error: {sign_e}")
-                            sign_data = {"predicted_sign": "Error", "confidence": 0.0}
-                        finally:
+                            gesture_result = await asyncio.to_thread(app_state.gesture_classifier.process_frame, mp_results)
+                            if gesture_result and gesture_result.get('confidence', 0) > 0.5:
+                                sign_data = gesture_result
                             sign_time = (time.time() - sign_start) * 1000
+                        except Exception as gesture_e:
+                            logger.error(f"Gesture classification error: {gesture_e}")
+                
+                # Fallback to transformer model if available and gesture didn't detect
+                if (sign_data.get('predicted_sign') == 'No sign detected' and 
+                    app_state.sign_classifier and frame_count % 3 == 0):
+                    mp_results = app_state.mp_processor.get_landmarks_for_classification()
+                    if mp_results:
+                        sign_start = time.time()
+                        try:
+                            transformer_result = await asyncio.to_thread(app_state.sign_classifier.update_sequence, mp_results)
+                            if transformer_result and transformer_result.get('confidence', 0) > sign_data.get('confidence', 0):
+                                sign_data = transformer_result
+                            sign_time = (time.time() - sign_start) * 1000
+                        except Exception as sign_e:
+                            logger.error(f"Transformer classification error: {sign_e}")
+                        finally:
+                            if sign_time == 0:
+                                sign_time = (time.time() - sign_start) * 1000
                 
                 # Drawing and payload creation: replace rectangles with facemesh-style outline colored by gender
                 # We will draw a translucent face polygon (approx by convex hull of landmarks) and label above head
@@ -721,22 +756,45 @@ async def debug_face_paths():
 @app.get("/signs")
 async def get_sign_info():
     """Get sign language classifier information"""
+    info = {
+        "gesture_classifier": None,
+        "transformer_classifier": None,
+        "active_method": "none"
+    }
+    
+    if app.state.app_state.gesture_classifier:
+        info["gesture_classifier"] = app.state.app_state.gesture_classifier.get_model_info()
+        info["active_method"] = "gesture"
+    
     if app.state.app_state.sign_classifier:
-        return app.state.app_state.sign_classifier.get_model_info()
-    return {"model_loaded": False, "actions": [], "message": "Sign classifier not available"}
+        info["transformer_classifier"] = app.state.app_state.sign_classifier.get_model_info()
+        if info["transformer_classifier"].get("model_loaded"):
+            info["active_method"] = "both"
+    
+    return info
 
 @app.post("/signs/reset")
 async def reset_sign_sequence():
     """Reset the current sign sequence"""
+    reset_count = 0
     if app.state.app_state.sign_classifier:
         app.state.app_state.sign_classifier.reset_sequence()
-        return {"status": "success", "message": "Sign sequence reset"}
-    return {"status": "error", "message": "Sign classifier not available"}
+        reset_count += 1
+    if app.state.app_state.gesture_classifier:
+        app.state.app_state.gesture_classifier.reset_sequence()
+        reset_count += 1
+    
+    return {"status": "success", "message": f"Reset {reset_count} classifier(s)"}
 
 @app.post("/signs/confidence/{threshold}")
 async def set_confidence_threshold(threshold: float):
     """Set the confidence threshold for sign predictions"""
+    set_count = 0
     if app.state.app_state.sign_classifier:
         app.state.app_state.sign_classifier.set_confidence_threshold(threshold)
-        return {"status": "success", "message": f"Confidence threshold set to {threshold}"}
-    return {"status": "error", "message": "Sign classifier not available"}
+        set_count += 1
+    if app.state.app_state.gesture_classifier:
+        app.state.app_state.gesture_classifier.set_confidence_threshold(threshold)
+        set_count += 1
+    
+    return {"status": "success", "message": f"Confidence threshold set to {threshold} for {set_count} classifier(s)"}
