@@ -6,7 +6,7 @@
     <title>Project Synapse - Real-Time AI</title>
     <style>
         :root {
-            --panel-max-w: 640px;
+            --panel-max-w: 400px;
             --panel-aspect: 4 / 3;
             --box-pad: 15px;
             --gap: 20px;
@@ -22,15 +22,27 @@
             padding: 20px; 
         }
         .container { 
-            display: grid; 
-            grid-template-columns: repeat(2, minmax(320px, 1fr)); 
+            display: flex; 
             gap: var(--gap); 
             width: 100%;
             max-width: 1400px;
             align-items: start;
         }
+        .video-container {
+            display: flex;
+            flex-direction: column;
+            gap: var(--gap);
+            flex: 0 0 400px;
+        }
+        .translation-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: var(--gap);
+        }
         @media (max-width: 1100px) { 
-            .container { grid-template-columns: 1fr; }
+            .container { flex-direction: column; }
+            .video-container { flex: 1; width: 100%; }
         }
         .video-box { 
             border: 3px solid #555; 
@@ -94,6 +106,79 @@
         .connected { color: #00ff00; }
         .disconnected { color: #ff4444; }
         .error { color: #ff8888; }
+        .translation-box {
+            border: 3px solid #555; 
+            border-radius: 12px; 
+            padding: var(--box-pad); 
+            background: linear-gradient(145deg, #2a2a2a, #3a3a3a);
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            height: 500px;
+            overflow-y: auto;
+        }
+        .translation-item {
+            padding: 10px;
+            margin-bottom: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .translation-time {
+            font-size: 0.8em;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        .translation-text {
+            font-size: 1.1em;
+            color: #e0e0e0;
+        }
+        .translation-confidence {
+            font-size: 0.9em;
+            color: #aaa;
+            margin-top: 5px;
+        }
+        .emotion-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+        .emotion-summary {
+            padding: 8px 12px;
+            cursor: pointer;
+            background-color: #333;
+            border: 2px solid #555;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        .emotion-summary:hover {
+            background-color: #444;
+            border-color: #777;
+        }
+        .emotion-details {
+            display: none;
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 5px;
+            background: linear-gradient(145deg, #2a2a2a, #3a3a3a);
+            border: 2px solid #555;
+            border-radius: 12px;
+            padding: 15px;
+            min-width: 350px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+        .emotion-details.show {
+            display: block;
+        }
+        .emotion-details h4 {
+            margin: 0 0 10px 0;
+            font-size: 1em;
+        }
+        .emotion-detail-row {
+            margin: 8px 0;
+            font-size: 0.85em;
+        }
     </style>
 </head>
 <body>
@@ -105,42 +190,64 @@
         <button id="switch-camera-btn">Switch Camera</button>
         <button id="test-connection-btn">Test Connection</button>
         <button id="toggle-gender-btn" title="Toggle Gender" aria-pressed="true">⚥ Gender: ON</button>
+        <button id="upload-test-video-btn" title="Upload Test Video">📹 Test Video</button>
+        <input type="file" id="test-video-input" accept="video/*" style="display: none;">
+        
+        <!-- Emotion Dropdown -->
+        <div class="emotion-dropdown">
+            <div class="emotion-summary" id="emotion-summary">
+                😐 neutral | 0%
+            </div>
+            <div class="emotion-details" id="emotion-details">
+                <h4>🎭 Advanced Emotion Detection</h4>
+                <div class="emotion-detail-row">
+                    <strong>Emotion:</strong> <span id="emotion-display-detail">😐 neutral</span>
+                </div>
+                <div class="emotion-detail-row">
+                    <strong>Confidence:</strong> <span id="emotion-confidence-detail">0%</span>
+                </div>
+                <div class="emotion-detail-row">
+                    <strong>Valence:</strong> <span id="valence-value-detail">0.0</span> (😢 ← → 😊)
+                </div>
+                <div class="emotion-detail-row">
+                    <strong>Arousal:</strong> <span id="arousal-value-detail">0.0</span> (😴 ← → 🤯)
+                </div>
+                <div class="emotion-detail-row">
+                    <button id="tune-emotions-btn" style="padding: 5px 10px; width: 100%;">🎛️ Fine-tune</button>
+                </div>
+                <div id="emotion-probabilities-detail" style="font-size: 0.7em; color: #666; margin-top: 10px;"></div>
+            </div>
+        </div>
     </div>
 
     <div class="container">
-        <div class="video-box">
-            <h2>📷 Your Webcam</h2>
-            <video id="webcam" width="640" height="480" autoplay muted></video>
-            <div class="stats" id="input-stats">Waiting...</div>
+        <div class="video-container">
+            <div class="video-box">
+                <h2>📷 Your Webcam</h2>
+                <video id="webcam" width="400" height="300" autoplay muted></video>
+                <div class="stats" id="input-stats">Waiting...</div>
+            </div>
+            
+            <div class="video-box">
+                <h2>🤖 AI Processed Feed</h2>
+                <div class="media-stack">
+                    <img id="processed-stream" width="400" height="300" style="background: #1a1a1a;">
+                    <canvas id="overlay-canvas" width="400" height="300"></canvas>
+                </div>
+                <div class="stats" id="output-stats">No data</div>
+            </div>
         </div>
         
-        <div class="video-box">
-            <h2>🤖 AI Processed Feed</h2>
-            <div class="media-stack">
-                <img id="processed-stream" width="640" height="480" style="background: #1a1a1a;">
-                <canvas id="overlay-canvas" width="640" height="480"></canvas>
-            </div>
-            <div class="stats" id="output-stats">No data</div>
-        </div>
-    </div>
-    
-    <!-- Emotion Display Panel -->
-    <div class="video-box" style="margin-top: 20px; text-align: center; max-width: 600px;">
-        <h3>🎭 Advanced Emotion Detection</h3>
-        <div style="display: flex; gap: 20px; justify-content: center; margin: 10px;">
-            <div>
-                <div id="emotion-display" style="font-size: 2em;">😐 neutral</div>
-                <div id="emotion-confidence" style="color: #888; font-size: 0.9em;">Confidence: 0%</div>
-            </div>
-            <div style="text-align: left; font-size: 0.8em;">
-                <div><strong>Valence:</strong> <span id="valence-value">0.0</span> (😢 ← → 😊)</div>
-                <div><strong>Arousal:</strong> <span id="arousal-value">0.0</span> (😴 ← → 🤯)</div>
-                <div style="margin-top: 10px;">
-                    <button id="tune-emotions-btn" style="padding: 5px 10px;">🎛️ Fine-tune</button>
+        <div class="translation-container">
+            <div class="translation-box">
+                <h2>💬 Sign Language Translation</h2>
+                <div id="translation-display">
+                    <p style="color: #888; text-align: center; padding: 20px;">
+                        Sign language translations will appear here in real-time...
+                    </p>
                 </div>
             </div>
         </div>
-        <div id="emotion-probabilities" style="font-size: 0.7em; color: #666; margin-top: 5px;"></div>
     </div>
     
     <!-- Fine-tuning Modal (hidden by default) -->
@@ -163,7 +270,7 @@
     </div>
     
     <p id="status" class="disconnected">Status: Initializing...</p>
-    <canvas id="capture-canvas" width="640" height="480" style="display: none;"></canvas>
+    <canvas id="capture-canvas" width="400" height="300" style="display: none;"></canvas>
 
     <script>
         // DOM Elements
@@ -179,14 +286,19 @@
         const overlayContext = overlayCanvas.getContext('2d');
         const inputStats = document.getElementById('input-stats');
         const outputStats = document.getElementById('output-stats');
-        const emotionDisplay = document.getElementById('emotion-display');
-        const emotionConfidence = document.getElementById('emotion-confidence');
-        const valenceValue = document.getElementById('valence-value');
-        const arousalValue = document.getElementById('arousal-value');
-        const emotionProbabilities = document.getElementById('emotion-probabilities');
+        const emotionSummary = document.getElementById('emotion-summary');
+        const emotionDetails = document.getElementById('emotion-details');
+        const emotionDisplayDetail = document.getElementById('emotion-display-detail');
+        const emotionConfidenceDetail = document.getElementById('emotion-confidence-detail');
+        const valenceValueDetail = document.getElementById('valence-value-detail');
+        const arousalValueDetail = document.getElementById('arousal-value-detail');
+        const emotionProbabilitiesDetail = document.getElementById('emotion-probabilities-detail');
         const tuneEmotionsBtn = document.getElementById('tune-emotions-btn');
         const tuneModal = document.getElementById('tune-modal');
-    const toggleGenderBtn = document.getElementById('toggle-gender-btn');
+        const toggleGenderBtn = document.getElementById('toggle-gender-btn');
+        const uploadTestVideoBtn = document.getElementById('upload-test-video-btn');
+        const testVideoInput = document.getElementById('test-video-input');
+        const translationDisplay = document.getElementById('translation-display');
 
         // Constants - removed unused GENDER_COLORS
 
@@ -221,6 +333,7 @@
         let ws;
         let frameCount = 0;
         let lastFrameTime = Date.now();
+        let translationHistory = [];
 
         function connectWebSocket() {
             console.log('🔄 Attempting WebSocket connection...');
@@ -273,16 +386,24 @@
                         toggleGenderBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false');
                     }
                     
-                    // Update emotion display panel
+                    // Update emotion display in dropdown
                     if (emotion.emotion && emotion.confidence > 0.2) {
-                        emotionDisplay.textContent = `${getEmotionEmoji(emotion.emotion)} ${emotion.emotion}`;
-                        emotionConfidence.textContent = `Confidence: ${(emotion.confidence * 100).toFixed(1)}%`;
-                        emotionDisplay.style.color = getEmotionColor(emotion.emotion);
+                        const emoji = getEmotionEmoji(emotion.emotion);
+                        const conf = (emotion.confidence * 100).toFixed(0);
+                        
+                        // Update summary
+                        emotionSummary.textContent = `${emoji} ${emotion.emotion} | ${conf}%`;
+                        emotionSummary.style.color = getEmotionColor(emotion.emotion);
+                        
+                        // Update details
+                        emotionDisplayDetail.textContent = `${emoji} ${emotion.emotion}`;
+                        emotionConfidenceDetail.textContent = `${conf}%`;
+                        emotionDisplayDetail.style.color = getEmotionColor(emotion.emotion);
                         
                         // Update valence-arousal values
                         if (emotion.valence !== null) {
-                            valenceValue.textContent = emotion.valence.toFixed(2);
-                            arousalValue.textContent = emotion.arousal.toFixed(2);
+                            valenceValueDetail.textContent = emotion.valence.toFixed(2);
+                            arousalValueDetail.textContent = emotion.arousal.toFixed(2);
                         }
                         
                         // Show smoothed probabilities
@@ -291,15 +412,23 @@
                                 .filter(([_, prob]) => prob > 0.1)
                                 .map(([emotion, prob]) => `${emotion}: ${(prob * 100).toFixed(0)}%`)
                                 .join(' | ');
-                            emotionProbabilities.textContent = probsText;
+                            emotionProbabilitiesDetail.textContent = probsText;
                         }
-                        
                     } else {
-                        emotionDisplay.textContent = '😐 neutral';
-                        emotionConfidence.textContent = 'Confidence: 0%';
-                        emotionDisplay.style.color = '#ccc';
-                        valenceValue.textContent = '0.0';
-                        arousalValue.textContent = '0.0';
+                        emotionSummary.textContent = '😐 neutral | 0%';
+                        emotionSummary.style.color = '#ccc';
+                        emotionDisplayDetail.textContent = '😐 neutral';
+                        emotionConfidenceDetail.textContent = '0%';
+                        emotionDisplayDetail.style.color = '#ccc';
+                        valenceValueDetail.textContent = '0.0';
+                        arousalValueDetail.textContent = '0.0';
+                    }
+                    
+                    // Update sign language translation display
+                    if (data.sign && data.sign.predicted_sign && data.sign.predicted_sign !== 'No Model' && 
+                        data.sign.predicted_sign !== 'Collecting...' && data.sign.predicted_sign !== 'Uncertain' &&
+                        data.sign.confidence > 0.5) {
+                        addTranslation(data.sign.predicted_sign, data.sign.confidence);
                     }
                     
                 } catch (e) {
@@ -323,7 +452,7 @@
 
         function sendFrame() {
             if (ws && ws.readyState === WebSocket.OPEN && video.videoWidth > 0) {
-                captureContext.drawImage(video, 0, 0, 640, 480);
+                captureContext.drawImage(video, 0, 0, 400, 300);
                 captureCanvas.toBlob((blob) => {
                     if (blob) {
                         ws.send(blob);
@@ -344,19 +473,19 @@
                 frameCount++;
                 const t = Date.now() / 1000;
                 captureContext.fillStyle = '#111';
-                captureContext.fillRect(0,0,640,480);
+                captureContext.fillRect(0,0,400,300);
                 // Animated gradient bars
                 for (let i=0;i<10;i++) {
-                    const y = (i * 48) + ((t*30) % 48);
+                    const y = (i * 30) + ((t*30) % 30);
                     const hue = (i*36 + t*40) % 360;
                     captureContext.fillStyle = `hsl(${hue},70%,50%)`;
-                    captureContext.fillRect(0, y % 480, 640, 24);
+                    captureContext.fillRect(0, y % 300, 400, 15);
                 }
                 captureContext.fillStyle = '#fff';
-                captureContext.font = '20px Segoe UI';
-                captureContext.fillText('No webcam detected - sending synthetic frames', 20, 40);
-                captureContext.fillText('Grant camera permission or attach a camera.', 20, 70);
-                captureContext.fillText('Frame #'+frameCount, 20, 100);
+                captureContext.font = '16px Segoe UI';
+                captureContext.fillText('No webcam detected - sending synthetic frames', 10, 30);
+                captureContext.fillText('Grant camera permission or attach a camera.', 10, 50);
+                captureContext.fillText('Frame #'+frameCount, 10, 70);
                 captureCanvas.toBlob(blob => {
                     if (blob) {
                         ws.send(blob);
@@ -395,8 +524,8 @@
             const constraints = {
                 video: {
                     deviceId: deviceId ? { exact: deviceId } : undefined,
-                    width: { ideal: 640 },
-                    height: { ideal: 480 },
+                    width: { ideal: 400 },
+                    height: { ideal: 300 },
                     frameRate: { ideal: 30 }
                 }
             };
@@ -456,6 +585,98 @@
                 console.error('Failed to toggle gender:', e);
             }
         });
+
+        // Emotion dropdown toggle
+        emotionSummary.addEventListener('click', () => {
+            emotionDetails.classList.toggle('show');
+        });
+
+        // Close emotion dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!emotionSummary.contains(e.target) && !emotionDetails.contains(e.target)) {
+                emotionDetails.classList.remove('show');
+            }
+        });
+
+        // Test video upload
+        uploadTestVideoBtn.addEventListener('click', () => {
+            testVideoInput.click();
+        });
+
+        testVideoInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                alert(`Test video upload feature coming soon!\nSelected: ${file.name}`);
+                // TODO: Implement video upload and processing
+            }
+        });
+
+        // Translation display function
+        function addTranslation(signText, confidence) {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString();
+            
+            // Avoid duplicate consecutive translations
+            if (translationHistory.length > 0) {
+                const last = translationHistory[translationHistory.length - 1];
+                if (last.text === signText && (now - last.timestamp) < 2000) {
+                    return; // Skip duplicate within 2 seconds
+                }
+            }
+            
+            const translation = {
+                text: signText,
+                confidence: confidence,
+                timestamp: now,
+                timeStr: timeStr
+            };
+            
+            translationHistory.push(translation);
+            
+            // Keep only last 50 translations
+            if (translationHistory.length > 50) {
+                translationHistory = translationHistory.slice(-50);
+            }
+            
+            // Update display
+            updateTranslationDisplay();
+            
+            // Text-to-speech (if available)
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(signText);
+                utterance.rate = 0.9;
+                utterance.pitch = 1.0;
+                utterance.volume = 0.8;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        function updateTranslationDisplay() {
+            if (translationHistory.length === 0) {
+                translationDisplay.innerHTML = `
+                    <p style="color: #888; text-align: center; padding: 20px;">
+                        Sign language translations will appear here in real-time...
+                    </p>
+                `;
+                return;
+            }
+            
+            let html = '';
+            for (let i = translationHistory.length - 1; i >= 0; i--) {
+                const t = translationHistory[i];
+                html += `
+                    <div class="translation-item">
+                        <div class="translation-time">${t.timeStr}</div>
+                        <div class="translation-text">🤟 ${t.text}</div>
+                        <div class="translation-confidence">Confidence: ${(t.confidence * 100).toFixed(0)}%</div>
+                    </div>
+                `;
+            }
+            translationDisplay.innerHTML = html;
+            
+            // Auto-scroll to latest translation
+            translationDisplay.scrollTop = 0;
+        }
 
         // Fine-tuning functionality
         tuneEmotionsBtn.addEventListener('click', () => {
