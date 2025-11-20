@@ -17,6 +17,51 @@ torch.backends.cudnn.enabled = True
 
 logger = logging.getLogger(__name__)
 
+class CompactSignGRU(nn.Module):
+    """Compact GRU-based sign language classifier - storage efficient"""
+    
+    def __init__(self, input_dim=1692, hidden_dim=64, num_layers=2, num_classes=26, dropout=0.3):
+        super(CompactSignGRU, self).__init__()
+        
+        # Input projection to reduce dimensionality
+        self.input_projection = nn.Linear(input_dim, 128)
+        
+        # Bidirectional GRU for temporal modeling
+        self.gru = nn.GRU(
+            input_size=128,
+            hidden_size=hidden_dim,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout if num_layers > 1 else 0,
+            bidirectional=True
+        )
+        
+        # Classification head
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_dim * 2, 32),  # *2 for bidirectional
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(32, num_classes)
+        )
+        
+    def forward(self, x):
+        # x: (batch, seq_len, input_dim)
+        batch_size, seq_len, _ = x.shape
+        
+        # Project input
+        x = self.input_projection(x)  # (batch, seq_len, 128)
+        
+        # GRU processing
+        gru_out, _ = self.gru(x)  # (batch, seq_len, hidden_dim*2)
+        
+        # Use last hidden state
+        last_hidden = gru_out[:, -1, :]  # (batch, hidden_dim*2)
+        
+        # Classify
+        logits = self.classifier(last_hidden)  # (batch, num_classes)
+        
+        return logits
+
 class TransformerBlock(nn.Module):
     """PyTorch Transformer block for sign language classification"""
     
@@ -130,7 +175,7 @@ class SignClassifier:
         self.sequence_length = 30
         self.num_landmarks = 1692  # Updated: MediaPipe Holistic with refined face landmarks (132+1434+63+63)
         self.current_sequence = []
-        self.confidence_threshold = 0.7
+        self.confidence_threshold = 0.5  # Lower for better detection
         
         # Performance tracking
         self.last_prediction_time = 0
@@ -140,40 +185,58 @@ class SignClassifier:
         if model_path and model_path.exists():
             self.load_model(model_path)
         else:
-            logger.warning("🤟 No trained model found - using demo mode")
+            logger.warning("🤟 No trained model found - initializing with default actions")
+            # Try to load anyway, it might exist after restart
             self._setup_demo_model()
     
     def _setup_demo_model(self):
         """Setup a demo model for testing without trained weights"""
         try:
-            self.model = SignLanguageTransformer(
-                sequence_length=self.sequence_length,
-                num_landmarks=self.num_landmarks,
-                num_actions=len(self.actions)
+            # Use default action list
+            num_actions = len(self.actions)
+            
+            self.model = CompactSignGRU(
+                input_dim=self.num_landmarks,
+                hidden_dim=64,
+                num_layers=2,
+                num_classes=num_actions,
+                dropout=0.3
             ).to(self.device)
             self.model.eval()  # Demo mode
-            logger.info("✅ Demo model initialized on GPU")
+            logger.info(f"✅ Demo model initialized with {num_actions} actions")
         except Exception as e:
             logger.error(f"❌ Failed to setup demo model: {e}")
     
     def load_model(self, model_path: Path) -> bool:
-        """Load trained PyTorch model - updated for new training format"""
+        """Load trained PyTorch model - supports both Transformer and CompactGRU"""
         try:
             checkpoint = torch.load(model_path, map_location=self.device)
             
             # Extract model configuration
             config = checkpoint.get('config', {})
             num_actions = config.get('num_actions', len(self.actions))
+            architecture = config.get('architecture', 'Transformer')
             
-            # Create model with updated architecture (no first dense layer)
-            self.model = SignLanguageTransformer(
-                sequence_length=self.sequence_length,
-                num_landmarks=self.num_landmarks,
-                num_actions=num_actions,
-                embed_dim=config.get('embed_dim', 128),
-                num_heads=config.get('num_heads', 8),
-                ff_dim=config.get('ff_dim', 128)
-            ).to(self.device)
+            # Create model based on architecture type
+            if architecture == 'CompactGRU':
+                self.model = CompactSignGRU(
+                    input_dim=config.get('input_dim', 1692),
+                    hidden_dim=config.get('hidden_dim', 64),
+                    num_layers=config.get('num_layers', 2),
+                    num_classes=num_actions,
+                    dropout=config.get('dropout', 0.3)
+                ).to(self.device)
+                logger.info(f"🎯 Loading CompactGRU model...")
+            else:
+                self.model = SignLanguageTransformer(
+                    sequence_length=self.sequence_length,
+                    num_landmarks=self.num_landmarks,
+                    num_actions=num_actions,
+                    embed_dim=config.get('embed_dim', 128),
+                    num_heads=config.get('num_heads', 8),
+                    ff_dim=config.get('ff_dim', 128)
+                ).to(self.device)
+                logger.info(f"🎯 Loading Transformer model...")
             
             # Load weights
             self.model.load_state_dict(checkpoint['model_state_dict'])
@@ -183,11 +246,15 @@ class SignClassifier:
             self.actions = checkpoint.get('actions', self.actions)
             self.label_map = {action: i for i, action in enumerate(self.actions)}
             
-            logger.info(f"✅ Loaded trained PyTorch model with {num_actions} actions on {self.device}")
+            model_type = checkpoint.get('model_type', 'unknown')
+            logger.info(f"✅ Loaded {architecture} model ({model_type}) with {num_actions} actions on {self.device}")
+            logger.info(f"🤟 Available signs: {', '.join(self.actions[:10])}{'...' if len(self.actions) > 10 else ''}")
             return True
             
         except Exception as e:
             logger.error(f"❌ Failed to load PyTorch model: {e}")
+            import traceback
+            traceback.print_exc()
             self._setup_demo_model()  # Fallback to demo
             return False
     

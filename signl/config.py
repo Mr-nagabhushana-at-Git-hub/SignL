@@ -41,8 +41,8 @@ class AppConfig:
     RELOAD = True
     
     # Device configuration
-    DEVICE = "cuda" if (TORCH_AVAILABLE and torch and torch.cuda.is_available()) else "cpu"
-    ENABLE_GPU = TORCH_AVAILABLE and torch and torch.cuda.is_available()
+    DEVICE = "cuda" if (TORCH_AVAILABLE and torch.cuda.is_available()) else "cpu"
+    ENABLE_GPU = TORCH_AVAILABLE and torch.cuda.is_available()
     
     # MediaPipe settings
     USE_GPU_MEDIAPIPE = True
