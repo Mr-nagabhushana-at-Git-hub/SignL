@@ -7,6 +7,7 @@ import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi import UploadFile, File
 import logging
 import cv2
 import numpy as np
@@ -18,7 +19,9 @@ from signl.utils.mediapipe_processor import MediaPipeProcessor
 from signl.models.face_processor import FaceProcessor
 from signl.models.pytorch_face_recognizer import PyTorchFaceRecognizer
 from signl.models.sign_classifier import SignClassifier
+from signl.models.gesture_sign_classifier import GestureSignClassifier
 from signl.models.gender_processor import GenderProcessor
+from signl.utils.video_processor import VideoProcessor
 from signl.config import MODELS_DIR, SIGN_LANGUAGE_MODEL, FRONTEND_DIR
 from signl.api.websocket_handler import WebSocketManager, websocket_endpoint
 
@@ -39,6 +42,11 @@ class AppState:
         self.last_faces_ts: float = 0.0
         # Feature toggles
         self.gender_enabled: bool = True
+        
+        # Initialize video processor for test videos
+        from pathlib import Path
+        temp_video_dir = Path(__file__).resolve().parent.parent / "data" / "temp_videos"
+        self.video_processor = VideoProcessor(temp_video_dir)
         
         # Initialize Enhanced MediaPipe with stable settings
         logger.info("🎯 Initializing MediaPipe...")
@@ -82,6 +90,7 @@ class AppState:
         # Initialize Sign Language Classifier with GPU acceleration
         logger.info("🤟 Initializing Sign Language Classifier...")
         try:
+            # Try PyTorch transformer model first
             self.sign_classifier = SignClassifier(SIGN_LANGUAGE_MODEL if SIGN_LANGUAGE_MODEL.exists() else None)
             
             # GPU warm-up for faster inference
@@ -91,9 +100,25 @@ class AppState:
             logger.info(f"✅ Sign Classifier ready! Model loaded: {sign_info['model_loaded']}")
             logger.info(f"🔥 GPU Device: {sign_info['device']}")
             logger.info(f"🤟 Available signs: {sign_info['actions']}")
+            
+            # Initialize gesture-based classifier as backup/alternative
+            logger.info("🤲 Initializing Gesture-based Sign Classifier...")
+            self.gesture_classifier = GestureSignClassifier(confidence_threshold=0.6)
+            gesture_info = self.gesture_classifier.get_model_info()
+            logger.info(f"✅ Gesture Classifier ready! Available signs: {len(gesture_info['actions'])}")
+            
         except Exception as e:
             logger.error(f"❌ Sign Classifier failed: {e}")
             self.sign_classifier = None
+            # Fallback to gesture classifier only
+            try:
+                logger.info("🔄 Falling back to gesture-based classifier only...")
+                self.gesture_classifier = GestureSignClassifier(confidence_threshold=0.6)
+                gesture_info = self.gesture_classifier.get_model_info()
+                logger.info(f"✅ Gesture Classifier ready! Available signs: {len(gesture_info['actions'])}")
+            except Exception as gesture_e:
+                logger.error(f"❌ Gesture Classifier also failed: {gesture_e}")
+                self.gesture_classifier = None
 
 app.state.app_state = AppState()
 
@@ -158,19 +183,36 @@ async def ai_processing_task(app_state: AppState):
                 # Sign language classification
                 sign_data = {"predicted_sign": "No Model", "confidence": 0.0}
                 sign_time = 0
-                if app_state.sign_classifier and frame_count % 3 == 0:
+                
+                # Try gesture-based classifier first (faster and doesn't need trained model)
+                if app_state.gesture_classifier and frame_count % 2 == 0:
                     mp_results = app_state.mp_processor.get_landmarks_for_classification()
                     if mp_results:
                         sign_start = time.time()
                         try:
-                            sign_data = await asyncio.to_thread(app_state.sign_classifier.update_sequence, mp_results)
-                            if not sign_data:
-                                sign_data = {"predicted_sign": "No Results", "confidence": 0.0}
-                        except Exception as sign_e:
-                            logger.error(f"Sign classification error: {sign_e}")
-                            sign_data = {"predicted_sign": "Error", "confidence": 0.0}
-                        finally:
+                            gesture_result = await asyncio.to_thread(app_state.gesture_classifier.process_frame, mp_results)
+                            if gesture_result and gesture_result.get('confidence', 0) > 0.5:
+                                sign_data = gesture_result
                             sign_time = (time.time() - sign_start) * 1000
+                        except Exception as gesture_e:
+                            logger.error(f"Gesture classification error: {gesture_e}")
+                
+                # Fallback to transformer model if available and gesture didn't detect
+                if (sign_data.get('predicted_sign') == 'No sign detected' and 
+                    app_state.sign_classifier and frame_count % 3 == 0):
+                    mp_results = app_state.mp_processor.get_landmarks_for_classification()
+                    if mp_results:
+                        sign_start = time.time()
+                        try:
+                            transformer_result = await asyncio.to_thread(app_state.sign_classifier.update_sequence, mp_results)
+                            if transformer_result and transformer_result.get('confidence', 0) > sign_data.get('confidence', 0):
+                                sign_data = transformer_result
+                            sign_time = (time.time() - sign_start) * 1000
+                        except Exception as sign_e:
+                            logger.error(f"Transformer classification error: {sign_e}")
+                        finally:
+                            if sign_time == 0:
+                                sign_time = (time.time() - sign_start) * 1000
                 
                 # Drawing and payload creation: replace rectangles with facemesh-style outline colored by gender
                 # We will draw a translucent face polygon (approx by convex hull of landmarks) and label above head
@@ -721,22 +763,178 @@ async def debug_face_paths():
 @app.get("/signs")
 async def get_sign_info():
     """Get sign language classifier information"""
+    info = {
+        "gesture_classifier": None,
+        "transformer_classifier": None,
+        "active_method": "none"
+    }
+    
+    if app.state.app_state.gesture_classifier:
+        info["gesture_classifier"] = app.state.app_state.gesture_classifier.get_model_info()
+        info["active_method"] = "gesture"
+    
     if app.state.app_state.sign_classifier:
-        return app.state.app_state.sign_classifier.get_model_info()
-    return {"model_loaded": False, "actions": [], "message": "Sign classifier not available"}
+        info["transformer_classifier"] = app.state.app_state.sign_classifier.get_model_info()
+        if info["transformer_classifier"].get("model_loaded"):
+            info["active_method"] = "both"
+    
+    return info
 
 @app.post("/signs/reset")
 async def reset_sign_sequence():
     """Reset the current sign sequence"""
+    reset_count = 0
     if app.state.app_state.sign_classifier:
         app.state.app_state.sign_classifier.reset_sequence()
-        return {"status": "success", "message": "Sign sequence reset"}
-    return {"status": "error", "message": "Sign classifier not available"}
+        reset_count += 1
+    if app.state.app_state.gesture_classifier:
+        app.state.app_state.gesture_classifier.reset_sequence()
+        reset_count += 1
+    
+    return {"status": "success", "message": f"Reset {reset_count} classifier(s)"}
 
 @app.post("/signs/confidence/{threshold}")
 async def set_confidence_threshold(threshold: float):
     """Set the confidence threshold for sign predictions"""
+    set_count = 0
     if app.state.app_state.sign_classifier:
         app.state.app_state.sign_classifier.set_confidence_threshold(threshold)
-        return {"status": "success", "message": f"Confidence threshold set to {threshold}"}
-    return {"status": "error", "message": "Sign classifier not available"}
+        set_count += 1
+    if app.state.app_state.gesture_classifier:
+        app.state.app_state.gesture_classifier.set_confidence_threshold(threshold)
+        set_count += 1
+    
+    return {"status": "success", "message": f"Confidence threshold set to {threshold} for {set_count} classifier(s)"}
+
+@app.post("/video/upload")
+async def upload_test_video(file: UploadFile = File(...)):
+    """
+    Upload a test video for sign language recognition testing
+    """
+    try:
+        # Validate file type
+        if not file.content_type or not file.content_type.startswith('video/'):
+            return {
+                "status": "error",
+                "message": f"Invalid file type: {file.content_type}. Please upload a video file."
+            }
+        
+        # Read file data
+        video_data = await file.read()
+        
+        # Save video
+        video_path = app.state.app_state.video_processor.save_uploaded_video(
+            video_data, 
+            file.filename or 'test_video.mp4'
+        )
+        
+        return {
+            "status": "success",
+            "message": f"Video uploaded successfully: {file.filename}",
+            "filename": file.filename,
+            "size_bytes": len(video_data),
+            "video_path": str(video_path)
+        }
+        
+    except Exception as e:
+        logger.error(f"Video upload error: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.post("/video/process/{filename}")
+async def process_test_video(filename: str):
+    """
+    Process uploaded test video and return sign language predictions
+    """
+    try:
+        video_path = app.state.app_state.video_processor.temp_dir / filename
+        
+        if not video_path.exists():
+            return {
+                "status": "error",
+                "message": f"Video not found: {filename}"
+            }
+        
+        # Use gesture classifier for processing
+        classifier = app.state.app_state.gesture_classifier
+        if not classifier:
+            # Fallback to transformer classifier
+            classifier = app.state.app_state.sign_classifier
+        
+        if not classifier:
+            return {
+                "status": "error",
+                "message": "No sign language classifier available"
+            }
+        
+        # Process video
+        result = await app.state.app_state.video_processor.process_video(
+            video_path,
+            app.state.app_state.mp_processor,
+            classifier
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Video processing error: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.get("/video/list")
+async def list_test_videos():
+    """List all uploaded test videos"""
+    try:
+        temp_dir = app.state.app_state.video_processor.temp_dir
+        videos = []
+        
+        if temp_dir.exists():
+            for video_file in temp_dir.glob('*'):
+                if video_file.is_file():
+                    videos.append({
+                        "filename": video_file.name,
+                        "size_bytes": video_file.stat().st_size,
+                        "modified": video_file.stat().st_mtime
+                    })
+        
+        return {
+            "status": "success",
+            "videos": videos,
+            "count": len(videos)
+        }
+        
+    except Exception as e:
+        logger.error(f"Video list error: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.delete("/video/{filename}")
+async def delete_test_video(filename: str):
+    """Delete a test video"""
+    try:
+        video_path = app.state.app_state.video_processor.temp_dir / filename
+        
+        if video_path.exists():
+            video_path.unlink()
+            return {
+                "status": "success",
+                "message": f"Video deleted: {filename}"
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"Video not found: {filename}"
+            }
+            
+    except Exception as e:
+        logger.error(f"Video deletion error: {e}")
+        return {
+            "status": "error",
+            "message": str(e)
+        }
