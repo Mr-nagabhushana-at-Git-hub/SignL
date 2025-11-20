@@ -1,6 +1,10 @@
-# MajorSignL - Real-Time Sign Language Recognition with Face Recognition
+# SignL - Real-Time Sign Language Recognition with Face Recognition
 
-A real-time AI system that combines **Sign Language Recognition** using MediaPipe and Transformer models with **Face Recognition** for person identification.
+A comprehensive real-time AI system that combines **Sign Language Recognition** using MediaPipe and Transformer models with **Face Recognition** for person identification, **Emotion Detection**, and **Gender Recognition**.
+
+> **Author:** Nagabhushana Raju S  
+> **License:** Proprietary  
+> **Version:** 1.0.0
 
 ## 🚀 Features
 
@@ -15,62 +19,121 @@ A real-time AI system that combines **Sign Language Recognition** using MediaPip
 ## 📁 Project Structure
 
 ```
-majorSignL/
-├── src/
-│   ├── data/
-│   │   ├── fase_data/           # Person folders with face images
-│   │   │   ├── Person Name 1/   # Folder named after person
-│   │   │   ├── Person Name 2/   # Contains 10+ images per person
-│   │   │   └── ...
-│   │   ├── models/              # Pre-trained models
-│   │   └── training/            # Sign language training data
-│   └── majorSignL/
-│       ├── api/                 # FastAPI server
-│       ├── models/              # Face & sign processors
-│       ├── utils/               # MediaPipe & filters
-│       └── frontend/            # Web interface
-├── env.yml                      # Conda environment (SignL)
-├── start_server.sh             # Linux startup script
-└── start_server.ps1            # Windows startup script
+SignL/
+├── signl/                      # Main application package
+│   ├── __init__.py
+│   ├── config.py              # Configuration settings
+│   ├── api/                   # FastAPI server
+│   │   ├── __init__.py
+│   │   ├── main.py           # Main API endpoints
+│   │   └── websocket_handler.py  # WebSocket handling
+│   ├── models/                # AI models
+│   │   ├── __init__.py
+│   │   ├── face_processor.py
+│   │   ├── sign_classifier.py
+│   │   ├── emotion_detector.py
+│   │   ├── gender_processor.py
+│   │   ├── pytorch_face_recognizer.py
+│   │   └── advanced_emotion_processor.py
+│   ├── utils/                 # Utilities
+│   │   ├── __init__.py
+│   │   ├── mediapipe_processor.py
+│   │   └── one_euro_filter.py
+│   ├── frontend/              # Web interface
+│   │   ├── index.html
+│   │   └── test.html
+│   └── data/                  # Data directory
+│       ├── face_data/        # Person folders with face images
+│       │   ├── Person_Name_1/
+│       │   ├── Person_Name_2/
+│       │   └── ...
+│       ├── models/           # Pre-trained models
+│       ├── training/         # Training data
+│       └── cache/            # Cache files
+├── tests/                     # Test files
+├── docs/                      # Documentation
+├── scripts/                   # Utility scripts
+├── requirements.txt           # Python dependencies
+├── pyproject.toml            # Project configuration
+├── start.sh                  # Linux/Mac startup script
+├── start.ps1                 # Windows startup script
+├── dev.sh                    # Quick development start
+└── README.md                 # This file
 ```
 
 ## 🛠️ Setup & Installation
 
-### 1. Environment Setup (WSL2 + CUDA)
+### Quick Start (Codespaces/Linux)
 
 ```bash
-# Create conda environment
-mamba env create -f env.yml
+# Clone or navigate to the repository
+cd SignL
 
-# Activate environment
-mamba activate SignL
+# Run the startup script (installs dependencies and starts server)
+./start.sh
+```
 
-# Verify CUDA setup
-python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}'); print(f'Device: {torch.cuda.get_device_name(0)}')"
+### Manual Setup
+
+#### 1. Create Virtual Environment
+
+```bash
+# Create venv
+python3 -m venv venv
+
+# Activate (Linux/Mac)
+source venv/bin/activate
+
+# Activate (Windows)
+venv\Scripts\activate
+```
+
+#### 2. Install Dependencies
+
+```bash
+# Upgrade pip
+pip install --upgrade pip
+
+# Install all dependencies
+pip install -r requirements.txt
+```
+
+#### 3. Verify Installation
+
+```bash
+# Check PyTorch and CUDA
+python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA: {torch.cuda.is_available()}')"
+
+# Check MediaPipe
+python -c "import mediapipe as mp; print('MediaPipe: OK')"
+
+# Check Face Recognition
+python -c "import face_recognition; print('Face Recognition: OK')"
 ```
 
 ### 2. Face Recognition Setup
 
 Your face data should be organized like this:
 ```
-src/data/fase_data/
-├── Aishwarya A/
-│   ├── aish (1).jpg
-│   ├── aish (2).jpg
+signl/data/face_data/
+├── Aishwarya_A/
+│   ├── photo1.jpg
+│   ├── photo2.jpg
+│   └── ... (10+ images recommended)
+├── John_Doe/
+│   ├── photo1.jpg
 │   └── ... (10+ images)
-├── Chandra Shekara/
-│   ├── chandra (1).jpg
-│   └── ... (10+ images)
-└── Nraju/
-    ├── nagabhushana (1).jpg
+└── Jane_Smith/
+    ├── photo1.jpg
     └── ... (10+ images)
 ```
 
-The system will:
-- Automatically load faces from person-named folders
-- Create face encodings for each person using multiple images
-- Cache encodings for faster startup
-- Use face_recognition library with dlib
+**Important:**
+- Each person gets their own folder named after them
+- Add 10+ clear face images per person for best accuracy
+- Supported formats: JPG, JPEG, PNG
+- Images are automatically processed on first startup
+- Encodings are cached for faster subsequent startups
 
 ### 3. Sign Language Model Training
 
@@ -94,23 +157,41 @@ These models provide additional verification for face recognition accuracy.
 
 ## 🚀 Running the Server
 
-### Linux/WSL2:
+### Option 1: Startup Script (Recommended)
+
+#### Linux/Mac/Codespaces:
 ```bash
-chmod +x start_server.sh
-./start_server.sh
+./start.sh
 ```
 
-### Windows:
+#### Windows:
 ```powershell
-.\start_server.ps1
+.\start.ps1
 ```
 
-### Manual Start:
+### Option 2: Quick Development Start
 ```bash
-mamba activate SignL
-cd src
-python -m uvicorn majorSignL.api.main:app --host 0.0.0.0 --port 8000 --reload
+# Assumes dependencies already installed
+./dev.sh
 ```
+
+### Option 3: Manual Start
+```bash
+# Activate virtual environment
+source venv/bin/activate  # Linux/Mac
+# OR
+venv\Scripts\activate  # Windows
+
+# Start server
+python -m uvicorn signl.api.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+### Access the Application
+
+Once started, open your browser and navigate to:
+- **Web Interface:** http://localhost:8000/static/index.html
+- **API Documentation:** http://localhost:8000/docs
+- **Health Check:** http://localhost:8000/health
 
 ## 🌐 API Endpoints
 

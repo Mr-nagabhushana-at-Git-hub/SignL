@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Data & Models
+signl/data/cache/*.pkl
+signl/data/cache/*.pth
+signl/data/cache/*.pt
+*.caffemodel
+*.prototxt.txt
+
+# Logs
+*.log
+logs/
+*.out
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Project specific
+*.pkl.bak
+.ipynb_checkpoints/
+*.h5
+*.weights
+
+# System
+Thumbs.db
+.env
+.env.local

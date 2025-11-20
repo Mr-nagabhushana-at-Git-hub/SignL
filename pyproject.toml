@@ -1,12 +1,66 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=68.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "majorSignL"
-version = "0.0.1"
+name = "signl"
+version = "1.0.0"
+description = "Real-Time Sign Language Recognition with Face Recognition"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.9"
+license = {text = "Proprietary"}
+authors = [
+    {name = "Nagabhushana Raju S", email = "your.email@example.com"}
+]
+keywords = ["sign-language", "face-recognition", "ai", "computer-vision", "mediapipe"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+dependencies = [
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    "mediapipe>=0.10.0",
+    "opencv-python>=4.8.0",
+    "numpy>=1.24.0",
+    "face-recognition>=1.3.0",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "websockets>=12.0",
+    "python-multipart>=0.0.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.7.0",
+    "flake8>=6.1.0",
+    "mypy>=1.5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Mr-nagabhushana-at-Git-hub/SignL"
+Documentation = "https://github.com/Mr-nagabhushana-at-Git-hub/SignL/README.md"
+Repository = "https://github.com/Mr-nagabhushana-at-Git-hub/SignL"
+
+[tool.setuptools]
+packages = ["signl", "signl.api", "signl.models", "signl.utils"]
+
+[tool.setuptools.package-data]
+signl = ["frontend/*", "data/**/*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310', 'py311']
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
