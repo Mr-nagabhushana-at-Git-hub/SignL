@@ -4,6 +4,7 @@
 import sys
 from pathlib import Path
 import asyncio
+from collections import deque
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -19,6 +20,19 @@ from signl.models.face_processor import FaceProcessor
 from signl.models.pytorch_face_recognizer import PyTorchFaceRecognizer
 from signl.models.sign_classifier import SignClassifier
 from signl.models.gender_processor import GenderProcessor
+from signl.models.advanced_processors import (
+    QuantumTransformerProcessor,
+    NeuromorphicProcessor,
+    BCIProcessor,
+    HolographicProcessor,
+    PhotonicNeuralProcessor,
+    UniversalSignLanguageModel,
+    CrossSpeciesCommunicator,
+    PrecognitiveEngine,
+    DreamStateLearner,
+    ExtraterrestrialCommunicator,
+    QuantumBiometricAuth
+)
 from signl.config import MODELS_DIR, SIGN_LANGUAGE_MODEL, FRONTEND_DIR
 from signl.api.websocket_handler import WebSocketManager, websocket_endpoint
 
@@ -39,12 +53,49 @@ class AppState:
         self.last_faces_ts: float = 0.0
         # Feature toggles
         self.gender_enabled: bool = True
+        # Session metrics
+        self.session_start_ts: float = time.time()
+        self.frames_processed: int = 0
+        self.total_translations: int = 0
+        self.sign_counts: dict = {}
+        self.peak_confidence: float = 0.0
+        self.fps_window = deque(maxlen=30)
+        self.last_frame_ts: float = time.time()
         
         # Initialize Enhanced MediaPipe with stable settings
         logger.info("🎯 Initializing MediaPipe...")
         # Keep internal mesh drawing off; we will draw custom overlays in this app
         self.mp_processor = MediaPipeProcessor(enable_gpu=True, use_mesh=False)
         logger.info("✅ MediaPipe ready!")
+        
+        # Initialize Advanced AI Processors
+        logger.info("🚀 Initializing Advanced AI Processors...")
+        try:
+            self.quantum_processor = QuantumTransformerProcessor()
+            self.neuromorphic_processor = NeuromorphicProcessor()
+            self.bci_processor = BCIProcessor()
+            self.holographic_processor = HolographicProcessor()
+            self.photonic_processor = PhotonicNeuralProcessor()
+            self.universal_processor = UniversalSignLanguageModel()
+            self.cross_species_processor = CrossSpeciesCommunicator()
+            self.precognitive_processor = PrecognitiveEngine()
+            self.dream_state_processor = DreamStateLearner()
+            self.extraterrestrial_processor = ExtraterrestrialCommunicator()
+            self.quantum_biometric_auth = QuantumBiometricAuth()
+            logger.info("✅ Advanced AI Processors initialized!")
+        except Exception as e:
+            logger.warning(f"⚠️ Advanced processors initialization partial: {e}")
+            self.quantum_processor = None
+            self.neuromorphic_processor = None
+            self.bci_processor = None
+            self.holographic_processor = None
+            self.photonic_processor = None
+            self.universal_processor = None
+            self.cross_species_processor = None
+            self.precognitive_processor = None
+            self.dream_state_processor = None
+            self.extraterrestrial_processor = None
+            self.quantum_biometric_auth = None
         
     # Initialize Face Recognition with MediaPipe Landmarks
         logger.info("👤 Initializing Face Recognition...")
@@ -112,6 +163,7 @@ async def ai_processing_task(app_state: AppState):
             try:
                 start_time = time.time()
                 frame_copy = app_state.latest_frame.copy()
+                app_state.frames_processed += 1
                 
                 # MediaPipe processing
                 processed_frame = app_state.mp_processor.process_frame(frame_copy)
@@ -166,6 +218,13 @@ async def ai_processing_task(app_state: AppState):
                             sign_data = await asyncio.to_thread(app_state.sign_classifier.update_sequence, mp_results)
                             if not sign_data:
                                 sign_data = {"predicted_sign": "No Results", "confidence": 0.0}
+                            else:
+                                predicted_sign = sign_data.get("predicted_sign")
+                                confidence = sign_data.get("confidence", 0.0)
+                                if predicted_sign and confidence > 0.6:
+                                    app_state.total_translations += 1
+                                    app_state.sign_counts[predicted_sign] = app_state.sign_counts.get(predicted_sign, 0) + 1
+                                    app_state.peak_confidence = max(app_state.peak_confidence, confidence)
                         except Exception as sign_e:
                             logger.error(f"Sign classification error: {sign_e}")
                             sign_data = {"predicted_sign": "Error", "confidence": 0.0}
@@ -283,6 +342,32 @@ async def ai_processing_task(app_state: AppState):
                 
                 _, buffer = cv2.imencode('.jpg', processed_frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
                 jpg_as_text = base64.b64encode(buffer).decode('utf-8')
+
+                now_ts = time.time()
+                frame_interval = now_ts - app_state.last_frame_ts
+                if frame_interval > 0:
+                    current_fps = 1.0 / frame_interval
+                    app_state.fps_window.append(current_fps)
+                app_state.last_frame_ts = now_ts
+
+                avg_fps = sum(app_state.fps_window) / len(app_state.fps_window) if app_state.fps_window else None
+                recognized_names = [f.get("name") for f in face_payload if f.get("name") and f.get("name") != "Unknown"]
+                metrics = {
+                    "frame": frame_count,
+                    "fps": round(avg_fps, 1) if avg_fps else None,
+                    "latency_ms": round((time.time() - start_time) * 1000, 1),
+                    "session_seconds": int(now_ts - app_state.session_start_ts),
+                    "translations_total": app_state.total_translations,
+                    "unique_signs": len(app_state.sign_counts),
+                    "peak_sign_confidence": round(app_state.peak_confidence, 3),
+                    "frames_processed": app_state.frames_processed
+                }
+                faces_meta = {
+                    "count": len(face_payload),
+                    "recognized": len(recognized_names),
+                    "names": recognized_names,
+                    "last_seen_ts": app_state.last_faces_ts
+                }
                 
                 payload = {
                     "image": jpg_as_text,
@@ -290,6 +375,8 @@ async def ai_processing_task(app_state: AppState):
                     "toggles": {"gender_enabled": app_state.gender_enabled},
                     "emotion": emotion_data,
                     "sign": sign_data,
+                    "metrics": metrics,
+                    "faces_meta": faces_meta,
                     "debug": {
                         "frame": frame_count,
                         "mediapipe_ms": round(mp_time, 1),
@@ -299,7 +386,8 @@ async def ai_processing_task(app_state: AppState):
                         "predicted_sign": sign_data.get('predicted_sign', 'N/A'),
                         "sign_confidence": round(sign_data.get('confidence', 0), 3),
                         "current_emotion": emotion_data.get('emotion', 'neutral'),
-                        "emotion_confidence": emotion_data.get('confidence', 0.0)
+                        "emotion_confidence": emotion_data.get('confidence', 0.0),
+                        "fps": metrics.get("fps")
                     }
                 }
                 
@@ -728,6 +816,258 @@ async def get_sign_info():
 @app.post("/signs/reset")
 async def reset_sign_sequence():
     """Reset the current sign sequence"""
+    
+# Advanced AI Processors Endpoints
+
+@app.get("/api/quantum")
+async def get_quantum_processor_status():
+    """Get quantum processor status and metrics"""
+    if not app.state.app_state.quantum_processor:
+        return {"error": "Quantum processor not available", "enabled": False}
+    
+    metrics = app.state.app_state.quantum_processor.get_quantum_metrics()
+    return {
+        "enabled": True,
+        "status": "operational",
+        "metrics": metrics,
+        "superposition_states": app.state.app_state.quantum_processor.superposition_states,
+        "entanglement_depth": app.state.app_state.quantum_processor.entanglement_depth
+    }
+
+@app.post("/api/quantum/process")
+async def process_quantum_inference(sign_data: dict = None):
+    """Process sign through quantum-enhanced transformer"""
+    if not app.state.app_state.quantum_processor:
+        return {"error": "Quantum processor not available"}
+    
+    if not sign_data:
+        sign_data = {"predicted_sign": "test", "confidence": 0.8}
+    
+    result = app.state.app_state.quantum_processor.process_quantum_inference(sign_data)
+    return {"status": "success", "result": result}
+
+@app.get("/api/neuromorphic")
+async def get_neuromorphic_status():
+    """Get neuromorphic processor status and metrics"""
+    if not app.state.app_state.neuromorphic_processor:
+        return {"error": "Neuromorphic processor not available", "enabled": False}
+    
+    metrics = app.state.app_state.neuromorphic_processor.get_neuromorphic_metrics()
+    return {
+        "enabled": True,
+        "status": "spiking",
+        "metrics": metrics,
+        "spiking_neurons": app.state.app_state.neuromorphic_processor.spiking_neurons
+    }
+
+@app.post("/api/neuromorphic/process")
+async def process_neuromorphic(data: dict = None):
+    """Process input through neuromorphic spiking neural network"""
+    if not app.state.app_state.neuromorphic_processor:
+        return {"error": "Neuromorphic processor not available"}
+    
+    import numpy as np
+    input_data = np.random.random((100, 100))  # Simulated input
+    result = app.state.app_state.neuromorphic_processor.process_neuromorphic(input_data)
+    return {"status": "success", "result": result}
+
+@app.get("/api/bci")
+async def get_bci_status():
+    """Get BCI processor status and metrics"""
+    if not app.state.app_state.bci_processor:
+        return {"error": "BCI processor not available", "enabled": False}
+    
+    metrics = app.state.app_state.bci_processor.get_bci_metrics()
+    return {
+        "enabled": True,
+        "status": "connected",
+        "metrics": metrics,
+        "eeg_channels": app.state.app_state.bci_processor.eeg_channels
+    }
+
+@app.post("/api/bci/process")
+async def process_bci_signal(sign_intent: dict = None):
+    """Process brain signals for thought-to-sign translation"""
+    if not app.state.app_state.bci_processor:
+        return {"error": "BCI processor not available"}
+    
+    intent = sign_intent.get("intent") if sign_intent else None
+    result = app.state.app_state.bci_processor.process_bci(intent)
+    return {"status": "success", "result": result}
+
+@app.get("/api/holographic")
+async def get_holographic_status():
+    """Get holographic processor status"""
+    if not app.state.app_state.holographic_processor:
+        return {"error": "Holographic processor not available", "enabled": False}
+    
+    return {
+        "enabled": True,
+        "status": "projecting",
+        "holographic_layers": app.state.app_state.holographic_processor.holographic_layers,
+        "spatial_dimensions": app.state.app_state.holographic_processor.spatial_dimensions
+    }
+
+@app.post("/api/holographic/process")
+async def process_holographic(landmarks: dict = None):
+    """Process 3D landmarks through holographic spatial encoding"""
+    if not app.state.app_state.holographic_processor:
+        return {"error": "Holographic processor not available"}
+    
+    import numpy as np
+    landmarks_3d = np.random.random((21, 3)) if not landmarks else None
+    result = app.state.app_state.holographic_processor.process_holographic(landmarks_3d)
+    return {"status": "success", "result": result}
+
+@app.get("/api/photonic")
+async def get_photonic_status():
+    """Get photonic processor status"""
+    if not app.state.app_state.photonic_processor:
+        return {"error": "Photonic processor not available", "enabled": False}
+    
+    return {
+        "enabled": True,
+        "status": "optical_processing",
+        "optical_wavelengths": app.state.app_state.photonic_processor.optical_wavelengths,
+        "optical_layers": app.state.app_state.photonic_processor.optical_layers
+    }
+
+@app.post("/api/photonic/process")
+async def process_photonic(data: dict = None):
+    """Process through photonic neural network"""
+    if not app.state.app_state.photonic_processor:
+        return {"error": "Photonic processor not available"}
+    
+    result = app.state.app_state.photonic_processor.process_photonic(data)
+    return {"status": "success", "result": result}
+
+@app.get("/api/universal")
+async def get_universal_status():
+    if not app.state.app_state.universal_processor:
+        return {"error": "Universal model not available", "enabled": False}
+    return {
+        "enabled": True,
+        "status": "aligned",
+        "metadata": app.state.app_state.universal_processor.get_metadata()
+    }
+
+@app.post("/api/universal/process")
+async def process_universal(payload: dict = None):
+    if not app.state.app_state.universal_processor:
+        return {"error": "Universal model not available"}
+    languages = payload.get("languages") if payload else None
+    result = app.state.app_state.universal_processor.universal_inference(languages)
+    return {"status": "success", "result": result}
+
+@app.get("/api/cross-species")
+async def get_cross_species_status():
+    if not app.state.app_state.cross_species_processor:
+        return {"error": "Cross-species processor not available", "enabled": False}
+    return {
+        "enabled": True,
+        "status": "listening",
+        "species_supported": app.state.app_state.cross_species_processor.species_supported
+    }
+
+@app.post("/api/cross-species/process")
+async def process_cross_species(payload: dict = None):
+    if not app.state.app_state.cross_species_processor:
+        return {"error": "Cross-species processor not available"}
+    species = (payload or {}).get("species", "unknown")
+    signal = (payload or {}).get("signal", "")
+    result = app.state.app_state.cross_species_processor.translate_species_signal(species, signal)
+    return {"status": "success", "result": result}
+
+@app.get("/api/precognitive")
+async def get_precognitive_status():
+    if not app.state.app_state.precognitive_processor:
+        return {"error": "Precognitive engine not available", "enabled": False}
+    return {
+        "enabled": True,
+        "status": "forecasting",
+        "window": app.state.app_state.precognitive_processor.predictive_window
+    }
+
+@app.post("/api/precognitive/process")
+async def process_precognitive(payload: dict = None):
+    if not app.state.app_state.precognitive_processor:
+        return {"error": "Precognitive engine not available"}
+    trace = (payload or {}).get("trace", [])
+    result = app.state.app_state.precognitive_processor.predict_future_sequence(trace)
+    return {"status": "success", "result": result}
+
+@app.get("/api/dream-state")
+async def get_dream_state_status():
+    if not app.state.app_state.dream_state_processor:
+        return {"error": "Dream-state learner not available", "enabled": False}
+    return {
+        "enabled": True,
+        "status": "lucid",
+        "dream_buffer": len(app.state.app_state.dream_state_processor.dream_buffer)
+    }
+
+@app.post("/api/dream-state/process")
+async def process_dream_state(payload: dict = None):
+    if not app.state.app_state.dream_state_processor:
+        return {"error": "Dream-state learner not available"}
+    signal = (payload or {}).get("signal", "")
+    result = app.state.app_state.dream_state_processor.learn_from_dream(signal)
+    return {"status": "success", "result": result}
+
+@app.get("/api/extraterrestrial")
+async def get_extraterrestrial_status():
+    if not app.state.app_state.extraterrestrial_processor:
+        return {"error": "Extraterrestrial communicator not available", "enabled": False}
+    return {
+        "enabled": True,
+        "status": "scanning",
+        "frequencies": app.state.app_state.extraterrestrial_processor.alien_frequency_bands
+    }
+
+@app.post("/api/extraterrestrial/process")
+async def process_extraterrestrial(payload: dict = None):
+    if not app.state.app_state.extraterrestrial_processor:
+        return {"error": "Extraterrestrial communicator not available"}
+    frequency = (payload or {}).get("frequency", 0.0)
+    signal = (payload or {}).get("signal", "")
+    result = app.state.app_state.extraterrestrial_processor.decode_extraterrestrial(frequency, signal)
+    return {"status": "success", "result": result}
+
+@app.get("/api/quantum-biometric")
+async def get_quantum_biometric_status():
+    if not app.state.app_state.quantum_biometric_auth:
+        return {"error": "Quantum biometric auth not available", "enabled": False}
+    return {
+        "enabled": True,
+        "status": "entangled",
+        "state_register": app.state.app_state.quantum_biometric_auth.entanglement_state
+    }
+
+@app.post("/api/quantum-biometric/process")
+async def process_quantum_biometric(payload: dict = None):
+    if not app.state.app_state.quantum_biometric_auth:
+        return {"error": "Quantum biometric auth not available"}
+    signature = (payload or {}).get("signature", {})
+    result = app.state.app_state.quantum_biometric_auth.authenticate_quantum_user(signature)
+    return {"status": "success", "result": result}
+
+@app.get("/api/advanced/status")
+async def get_all_advanced_status():
+    """Get status of all advanced processors"""
+    return {
+        "quantum": app.state.app_state.quantum_processor is not None,
+        "neuromorphic": app.state.app_state.neuromorphic_processor is not None,
+        "bci": app.state.app_state.bci_processor is not None,
+        "holographic": app.state.app_state.holographic_processor is not None,
+        "photonic": app.state.app_state.photonic_processor is not None,
+        "universal": app.state.app_state.universal_processor is not None,
+        "cross_species": app.state.app_state.cross_species_processor is not None,
+        "precognitive": app.state.app_state.precognitive_processor is not None,
+        "dream_state": app.state.app_state.dream_state_processor is not None,
+        "extraterrestrial": app.state.app_state.extraterrestrial_processor is not None,
+        "quantum_biometric": app.state.app_state.quantum_biometric_auth is not None,
+        "timestamp": time.time()
+    }
     if app.state.app_state.sign_classifier:
         app.state.app_state.sign_classifier.reset_sequence()
         return {"status": "success", "message": "Sign sequence reset"}

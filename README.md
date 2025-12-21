@@ -190,6 +190,7 @@ python -m uvicorn signl.api.main:app --host 0.0.0.0 --port 8000 --reload
 
 Once started, open your browser and navigate to:
 - **Web Interface:** http://localhost:8000/static/index.html
+- **Omni UI (experimental):** http://localhost:8000/static/omni/index.html
 - **API Documentation:** http://localhost:8000/docs
 - **Health Check:** http://localhost:8000/health
 

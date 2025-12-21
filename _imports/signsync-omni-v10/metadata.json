@@ -1,0 +1,8 @@
+{
+  "name": "SignSync Omni V10",
+  "description": "Bi-Directional AI Sign Language Bridge with Hyper-Realistic Avatar Interface and Neural Context Engine.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
