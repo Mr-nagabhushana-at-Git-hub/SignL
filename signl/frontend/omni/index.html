@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SignSync Omni • SignL</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              500: '#8b5cf6',
+              600: '#7c3aed',
+              700: '#6d28d9'
+            },
+            accent: {
+              500: '#22d3ee',
+              600: '#06b6d4'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="https://unpkg.com/lucide-static@0.321.0/font/lucide.css" />
+  <style>
+    body {
+      background: radial-gradient(circle at 20% 20%, rgba(124,58,237,0.12), transparent 30%),
+                  radial-gradient(circle at 80% 0%, rgba(34,211,238,0.12), transparent 35%),
+                  #0b1120;
+      color: #e5e7eb;
+    }
+    .glass {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(255,255,255,0.05);
+      backdrop-filter: blur(12px);
+    }
+    .tab-active {
+      background: linear-gradient(90deg, #7c3aed, #22d3ee);
+      color: white;
+      box-shadow: 0 10px 40px rgba(124, 58, 237, 0.25);
+    }
+  </style>
+</head>
+<body class="min-h-screen font-sans">
+  <div class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+    <!-- Header -->
+    <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex items-center gap-3">
+        <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-primary-600 to-accent-500 flex items-center justify-center text-white text-xl font-bold shadow-lg">🤟</div>
+        <div>
+          <p class="text-sm uppercase tracking-[0.25em] text-slate-400">SignSync Omni</p>
+          <h1 class="text-2xl sm:text-3xl font-bold text-white">Bi-Directional Sign Bridge</h1>
+          <p class="text-xs text-slate-400">v10.0.1 • Neural + Face Stack</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-slate-400">
+        <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full glass">🔒 Secured Session</span>
+        <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full glass">⚡ Real-Time WebSocket</span>
+      </div>
+    </header>
+
+    <!-- Tabs -->
+    <nav class="glass rounded-2xl p-2 flex flex-wrap gap-2" id="omni-tabs">
+      <button class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-200 tab-active" data-tab="overview">Overview</button>
+      <button class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-200" data-tab="translator">Translator</button>
+      <button class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-200" data-tab="analytics">Analytics</button>
+      <button class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-200" data-tab="advanced">⚛️ Advanced AI</button>
+      <button class="px-4 py-2 rounded-xl text-sm font-semibold text-slate-200" data-tab="settings">Settings</button>
+    </nav>
+
+    <!-- Overview -->
+    <section id="tab-overview" class="grid gap-4 md:grid-cols-3">
+      <div class="glass rounded-2xl p-5 md:col-span-2 space-y-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-sm text-slate-400">Neural feature stack</p>
+            <h2 class="text-3xl font-bold text-white">Real-time Sign ↔ Speech</h2>
+          </div>
+          <span class="px-3 py-1 rounded-full text-xs bg-primary-600/30 text-primary-100 border border-primary-700">GPU Ready</span>
+        </div>
+        <p class="text-slate-300 leading-relaxed">
+          A modern control surface inspired by the Vibe-built SignSync Omni v10 UI.
+          Stream frames to the SignL backend, visualize detections, and explore session metrics without leaving the browser.
+        </p>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5">
+          <div class="glass rounded-xl p-4 border border-white/5">
+            <p class="text-sm text-slate-400">Neural Processing</p>
+            <p class="text-lg font-semibold text-white">MediaPipe + Transformer</p>
+          </div>
+          <div class="glass rounded-xl p-4 border border-white/5">
+            <p class="text-sm text-slate-400">Face Intelligence</p>
+            <p class="text-lg font-semibold text-white">Gender • Emotion</p>
+          </div>
+          <div class="glass rounded-xl p-4 border border-white/5">
+            <p class="text-sm text-slate-400">Latency</p>
+            <p class="text-lg font-semibold text-white" id="ovr-latency">–</p>
+          </div>
+          <div class="glass rounded-xl p-4 border border-white/5">
+            <p class="text-sm text-slate-400">Throughput</p>
+            <p class="text-lg font-semibold text-white" id="ovr-fps">–</p>
+          </div>
+          <div class="glass rounded-xl p-4 border border-white/5">
+            <p class="text-sm text-slate-400">Last Sign</p>
+            <p class="text-lg font-semibold text-white" id="ovr-last-sign">–</p>
+          </div>
+          <div class="glass rounded-xl p-4 border border-white/5">
+            <p class="text-sm text-slate-400">Confidence</p>
+            <p class="text-lg font-semibold text-white" id="ovr-confidence">–</p>
+          </div>
+          <div class="glass rounded-xl p-4 border border-white/5">
+            <p class="text-sm text-slate-400">Faces</p>
+            <p class="text-lg font-semibold text-white" id="ovr-faces">–</p>
+          </div>
+          <div class="glass rounded-xl p-4 border border-white/5">
+            <p class="text-sm text-slate-400">Recognized</p>
+            <p class="text-lg font-semibold text-white" id="ovr-names">–</p>
+          </div>
+          <div class="glass rounded-xl p-4 border border-white/5">
+            <p class="text-sm text-slate-400">Unique Signs</p>
+            <p class="text-lg font-semibold text-white" id="ovr-unique">–</p>
+          </div>
+        </div>
+      </div>
+      <div class="glass rounded-2xl p-5 space-y-3 border border-primary-900/40">
+        <div class="flex items-center gap-2 text-primary-100">
+          <span class="i-lucide-shield-check"></span>
+          <p class="text-sm">Digital Certificate</p>
+        </div>
+        <p class="text-lg font-semibold text-white">SignSync Omni V10</p>
+        <div class="space-y-1 text-sm text-slate-300">
+          <p><span class="text-slate-400">Owner:</span> Nagabhushana Raju S</p>
+          <p><span class="text-slate-400">Email:</span> nagabhushanaraju2003@gmail.com</p>
+          <p><span class="text-slate-400">Version:</span> 10.0.1-Alpha-Neural</p>
+          <p><span class="text-slate-400">Encryption:</span> NRAJU-V10-SIGNSYNC-SECURE-HASH-256</p>
+          <p><span class="text-slate-400">Issued:</span> <span id="cert-issued">–</span></p>
+        </div>
+        <div class="flex flex-wrap gap-2 pt-2">
+          <span class="px-3 py-1 rounded-full text-xs bg-primary-600/30 text-primary-100">ASL</span>
+          <span class="px-3 py-1 rounded-full text-xs bg-primary-600/30 text-primary-100">BSL</span>
+          <span class="px-3 py-1 rounded-full text-xs bg-primary-600/30 text-primary-100">ISL</span>
+          <span class="px-3 py-1 rounded-full text-xs bg-primary-600/30 text-primary-100">LIBRAS</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Translator -->
+    <section id="tab-translator" class="hidden space-y-4">
+      <div class="glass rounded-2xl p-4 flex flex-wrap gap-3 items-center">
+        <button id="omni-start" class="px-4 py-2 rounded-xl bg-gradient-to-r from-primary-600 to-accent-500 font-semibold text-white shadow-lg">Start Session</button>
+        <button id="omni-stop" class="px-4 py-2 rounded-xl text-sm border border-white/10 text-slate-200">Stop</button>
+        <label class="text-sm text-slate-300 flex items-center gap-2">Camera
+          <select id="cam-select" class="bg-slate-900 border border-white/10 rounded-lg px-2 py-1 text-sm text-slate-200"></select>
+        </label>
+        <label class="text-sm text-slate-300 flex items-center gap-2">Mic
+          <select id="mic-select" class="bg-slate-900 border border-white/10 rounded-lg px-2 py-1 text-sm text-slate-200"></select>
+        </label>
+        <label class="flex items-center gap-2 text-sm text-slate-300">
+          <input type="checkbox" id="toggle-tts" class="accent-primary-600" checked /> TTS
+        </label>
+      </div>
+      <div class="grid gap-4 lg:grid-cols-2">
+        <div class="glass rounded-2xl p-4 space-y-3">
+          <div class="flex items-center justify-between text-sm text-slate-400">
+            <p>Live Camera</p>
+            <p id="input-stats">–</p>
+          </div>
+          <div class="aspect-video bg-black/60 rounded-xl overflow-hidden border border-white/5">
+            <video id="omni-webcam" class="w-full h-full object-cover" autoplay playsinline muted></video>
+          </div>
+        </div>
+        <div class="glass rounded-2xl p-4 space-y-3">
+          <div class="flex items-center justify-between text-sm text-slate-400">
+            <p>Processed Stream</p>
+            <p id="output-stats">–</p>
+          </div>
+          <div class="aspect-video bg-black/60 rounded-xl overflow-hidden border border-white/5">
+            <img id="omni-processed" class="w-full h-full object-cover" alt="Processed" />
+          </div>
+        </div>
+      </div>
+      <div class="grid gap-4 md:grid-cols-3">
+        <div class="glass rounded-2xl p-4 space-y-2 border border-white/5">
+          <p class="text-xs uppercase tracking-wide text-slate-400">Current Sign</p>
+          <p id="sign-text" class="text-2xl font-bold text-white">–</p>
+          <p id="sign-confidence" class="text-sm text-slate-300">Confidence: –</p>
+          <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+            <div id="sign-progress" class="h-full w-0 bg-gradient-to-r from-primary-600 to-accent-500"></div>
+          </div>
+        </div>
+        <div class="glass rounded-2xl p-4 space-y-2 border border-white/5">
+          <p class="text-xs uppercase tracking-wide text-slate-400">Emotion</p>
+          <p id="emotion-text" class="text-xl font-semibold text-white">–</p>
+          <p id="emotion-confidence" class="text-sm text-slate-300">–</p>
+        </div>
+        <div class="glass rounded-2xl p-4 space-y-2 border border-white/5">
+          <p class="text-xs uppercase tracking-wide text-slate-400">Session</p>
+          <p id="session-uptime" class="text-xl font-semibold text-white">00:00</p>
+          <p id="translation-count" class="text-sm text-slate-300">0 translations</p>
+        </div>
+      </div>
+      <div class="glass rounded-2xl p-4 border border-white/5">
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-sm text-slate-300">Translation History</p>
+          <button id="clear-history" class="text-xs text-slate-400 hover:text-white">Clear</button>
+        </div>
+        <div id="history-list" class="space-y-2 max-h-52 overflow-y-auto"></div>
+      </div>
+    </section>
+
+    <!-- Analytics -->
+    <section id="tab-analytics" class="hidden space-y-4">
+      <div class="glass rounded-2xl p-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="p-4 rounded-xl bg-white/5">
+          <p class="text-xs text-slate-400">Translations</p>
+          <p id="analytics-total" class="text-2xl font-bold text-white">0</p>
+        </div>
+        <div class="p-4 rounded-xl bg-white/5">
+          <p class="text-xs text-slate-400">Unique Signs</p>
+          <p id="analytics-unique" class="text-2xl font-bold text-white">0</p>
+        </div>
+        <div class="p-4 rounded-xl bg-white/5">
+          <p class="text-xs text-slate-400">Avg Confidence</p>
+          <p id="analytics-confidence" class="text-2xl font-bold text-white">–</p>
+        </div>
+        <div class="p-4 rounded-xl bg-white/5">
+          <p class="text-xs text-slate-400">Peak FPS</p>
+          <p id="analytics-fps" class="text-2xl font-bold text-white">–</p>
+        </div>
+      </div>
+      <div class="glass rounded-2xl p-4 border border-white/5">
+        <p class="text-sm text-slate-300 mb-3">Top Signs</p>
+        <div id="analytics-top" class="grid gap-2 sm:grid-cols-2 lg:grid-cols-3"></div>
+      </div>
+    </section>
+
+    <!-- Advanced AI -->
+    <section id="tab-advanced" class="hidden space-y-4">
+      <div class="glass rounded-2xl p-5 space-y-4">
+        <h2 class="text-xl font-bold text-white">⚛️ Advanced AI Processors</h2>
+        <p class="text-sm text-slate-300">Next-generation quantum, neuromorphic, BCI, holographic, and photonic processing</p>
+      </div>
+      
+      <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <!-- Quantum Processor -->
+        <div class="glass rounded-2xl p-4 border border-purple-500/30">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+              ⚛️ Quantum
+            </h3>
+            <span id="quantum-status" class="px-2 py-1 rounded text-xs bg-gray-700 text-gray-300">Loading...</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span class="text-slate-400">Superposition:</span><span id="quantum-superposition" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Fidelity:</span><span id="quantum-fidelity" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Speedup:</span><span id="quantum-speedup" class="text-white">–</span></div>
+          </div>
+          <button id="quantum-test" class="mt-3 w-full px-3 py-2 rounded-lg text-xs bg-purple-600 hover:bg-purple-700 text-white">Test Process</button>
+        </div>
+
+        <!-- Neuromorphic Processor -->
+        <div class="glass rounded-2xl p-4 border border-green-500/30">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+              🧬 Neuromorphic
+            </h3>
+            <span id="neuro-status" class="px-2 py-1 rounded text-xs bg-gray-700 text-gray-300">Loading...</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span class="text-slate-400">Neurons:</span><span id="neuro-neurons" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Efficiency:</span><span id="neuro-efficiency" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Energy:</span><span id="neuro-energy" class="text-white">–</span></div>
+          </div>
+          <button id="neuro-test" class="mt-3 w-full px-3 py-2 rounded-lg text-xs bg-green-600 hover:bg-green-700 text-white">Test Spikes</button>
+        </div>
+
+        <!-- BCI Processor -->
+        <div class="glass rounded-2xl p-4 border border-blue-500/30">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+              🧠 BCI
+            </h3>
+            <span id="bci-status" class="px-2 py-1 rounded text-xs bg-gray-700 text-gray-300">Loading...</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span class="text-slate-400">EEG Channels:</span><span id="bci-channels" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Signal Quality:</span><span id="bci-quality" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Latency:</span><span id="bci-latency" class="text-white">–</span></div>
+          </div>
+          <button id="bci-test" class="mt-3 w-full px-3 py-2 rounded-lg text-xs bg-blue-600 hover:bg-blue-700 text-white">Test Thought</button>
+        </div>
+
+        <!-- Holographic Processor -->
+        <div class="glass rounded-2xl p-4 border border-cyan-500/30">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+              📦 Holographic
+            </h3>
+            <span id="holo-status" class="px-2 py-1 rounded text-xs bg-gray-700 text-gray-300">Loading...</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span class="text-slate-400">Dimensions:</span><span id="holo-dimensions" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Layers:</span><span id="holo-layers" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Fidelity:</span><span id="holo-fidelity" class="text-white">–</span></div>
+          </div>
+          <button id="holo-test" class="mt-3 w-full px-3 py-2 rounded-lg text-xs bg-cyan-600 hover:bg-cyan-700 text-white">Test 4D</button>
+        </div>
+
+        <!-- Photonic Processor -->
+        <div class="glass rounded-2xl p-4 border border-yellow-500/30">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">
+              💡 Photonic
+            </h3>
+            <span id="photonic-status" class="px-2 py-1 rounded text-xs bg-gray-700 text-gray-300">Loading...</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span class="text-slate-400">Wavelengths:</span><span id="photonic-wavelengths" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Efficiency:</span><span id="photonic-efficiency" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Latency:</span><span id="photonic-latency" class="text-white">–</span></div>
+          </div>
+          <button id="photonic-test" class="mt-3 w-full px-3 py-2 rounded-lg text-xs bg-yellow-600 hover:bg-yellow-700 text-white">Test Optical</button>
+        </div>
+
+        <!-- Universal Model -->
+        <div class="glass rounded-2xl p-4 border border-pink-500/30">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">🌐 Universal</h3>
+            <span id="universal-status" class="px-2 py-1 rounded text-xs bg-gray-700 text-gray-300">Loading...</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span class="text-slate-400">Languages:</span><span id="universal-languages" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Coverage:</span><span id="universal-coverage" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Harmonics:</span><span id="universal-harmonics" class="text-white">–</span></div>
+          </div>
+          <button id="universal-test" class="mt-3 w-full px-3 py-2 rounded-lg text-xs bg-pink-600 hover:bg-pink-700 text-white">Test Universal</button>
+        </div>
+
+        <!-- Cross-species -->
+        <div class="glass rounded-2xl p-4 border border-orange-500/30">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">🛰️ Cross-Species</h3>
+            <span id="cross-species-status" class="px-2 py-1 rounded text-xs bg-gray-700 text-gray-300">Loading...</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span class="text-slate-400">Species:</span><span id="cross-species-supported" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Spectrum:</span><span id="cross-species-spectrum" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">SNR:</span><span id="cross-species-snr" class="text-white">–</span></div>
+          </div>
+          <button id="cross-species-test" class="mt-3 w-full px-3 py-2 rounded-lg text-xs bg-orange-600 hover:bg-orange-700 text-white">Test Signal</button>
+        </div>
+
+        <!-- Precognitive -->
+        <div class="glass rounded-2xl p-4 border border-red-500/30">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">🔮 Precognitive</h3>
+            <span id="precog-status" class="px-2 py-1 rounded text-xs bg-gray-700 text-gray-300">Loading...</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span class="text-slate-400">Window:</span><span id="precog-window" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Confidence:</span><span id="precog-confidence" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Drift:</span><span id="precog-drift" class="text-white">–</span></div>
+          </div>
+          <button id="precog-test" class="mt-3 w-full px-3 py-2 rounded-lg text-xs bg-red-600 hover:bg-red-700 text-white">Test Forecast</button>
+        </div>
+
+        <!-- Dream-state -->
+        <div class="glass rounded-2xl p-4 border border-indigo-500/30">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">💤 Dream-State</h3>
+            <span id="dream-status" class="px-2 py-1 rounded text-xs bg-gray-700 text-gray-300">Loading...</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span class="text-slate-400">Buffer:</span><span id="dream-buffer" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Coherence:</span><span id="dream-coherence" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Latency:</span><span id="dream-latency" class="text-white">–</span></div>
+          </div>
+          <button id="dream-test" class="mt-3 w-full px-3 py-2 rounded-lg text-xs bg-indigo-600 hover:bg-indigo-700 text-white">Test Dream</button>
+        </div>
+
+        <!-- Extraterrestrial -->
+        <div class="glass rounded-2xl p-4 border border-lime-500/30">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">👽 Extraterrestrial</h3>
+            <span id="xeno-status" class="px-2 py-1 rounded text-xs bg-gray-700 text-gray-300">Loading...</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span class="text-slate-400">Bands:</span><span id="xeno-bands" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Locks:</span><span id="xeno-locks" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Parity:</span><span id="xeno-parity" class="text-white">–</span></div>
+          </div>
+          <button id="xeno-test" class="mt-3 w-full px-3 py-2 rounded-lg text-xs bg-lime-600 hover:bg-lime-700 text-white">Test Deep Space</button>
+        </div>
+
+        <!-- Quantum Biometric Auth -->
+        <div class="glass rounded-2xl p-4 border border-teal-500/30">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-lg font-semibold text-white flex items-center gap-2">🪪 Quantum Biometric</h3>
+            <span id="quantum-biometric-status" class="px-2 py-1 rounded text-xs bg-gray-700 text-gray-300">Loading...</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span class="text-slate-400">Qubits:</span><span id="quantum-biometric-state" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Noise:</span><span id="quantum-biometric-noise" class="text-white">–</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">Stability:</span><span id="quantum-biometric-stability" class="text-white">–</span></div>
+          </div>
+          <button id="quantum-biometric-test" class="mt-3 w-full px-3 py-2 rounded-lg text-xs bg-teal-600 hover:bg-teal-700 text-white">Test Auth</button>
+        </div>
+      </div>
+
+      <div class="glass rounded-2xl p-5 border border-white/5">
+        <h3 class="text-lg font-semibold text-white mb-3">Test Results</h3>
+        <div id="advanced-test-results" class="text-sm text-slate-300 font-mono bg-black/40 rounded-lg p-3 max-h-64 overflow-y-auto">
+          <p class="text-slate-500">No tests run yet. Click any "Test" button above to process data.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section id="tab-settings" class="hidden space-y-4">
+      <div class="glass rounded-2xl p-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <label class="flex items-center justify-between text-sm text-slate-300 glass rounded-xl px-3 py-2 border border-white/5">
+          <span>Auto-translate</span>
+          <input id="setting-auto" type="checkbox" class="accent-primary-600" checked />
+        </label>
+        <label class="flex items-center justify-between text-sm text-slate-300 glass rounded-xl px-3 py-2 border border-white/5">
+          <span>Send audio</span>
+          <input id="setting-audio" type="checkbox" class="accent-primary-600" checked />
+        </label>
+        <label class="flex items-center justify-between text-sm text-slate-300 glass rounded-xl px-3 py-2 border border-white/5">
+          <span>Face overlays</span>
+          <input id="setting-face" type="checkbox" class="accent-primary-600" checked />
+        </label>
+        <label class="flex items-center justify-between text-sm text-slate-300 glass rounded-xl px-3 py-2 border border-white/5">
+          <span>High quality JPEG</span>
+          <input id="setting-quality" type="checkbox" class="accent-primary-600" checked />
+        </label>
+        <label class="flex items-center justify-between text-sm text-slate-300 glass rounded-xl px-3 py-2 border border-white/5">
+          <span>Show analytics</span>
+          <input id="setting-analytics" type="checkbox" class="accent-primary-600" checked />
+        </label>
+      </div>
+      <div class="glass rounded-2xl p-5 border border-white/5">
+        <p class="text-sm text-slate-300">Notes</p>
+        <ul class="text-sm text-slate-400 list-disc list-inside mt-2 space-y-1">
+          <li>Uses the existing `/ws` endpoint for frame streaming.</li>
+          <li>Shares sign/emotion parsing logic with the classic SignL UI.</li>
+          <li>Built from the Vibe-generated Omni v10 concepts but fully static.</li>
+          <li>Advanced AI processors: Quantum, Neuromorphic, BCI, Holographic, Photonic</li>
+        </ul>
+      </div>
+    </section>
+  </div>
+
+  <canvas id="omni-canvas" class="hidden"></canvas>
+  <script src="./omni.js"></script>
+</body>
+</html>
